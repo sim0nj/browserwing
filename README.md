@@ -17,6 +17,10 @@
 
 <p align="center"><a href="https://browserwing.com">browserwing.com</a></p>
 
+
+https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
+
+
 ## Highlights
 
 - Browser management: launch, control, and persist sessions with cookies
