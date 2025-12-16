@@ -276,7 +276,7 @@ export default function ScriptManager() {
         inputVariables.forEach(varName => {
           properties[varName] = {
             type: 'string',
-            description: `${varName} 参数`
+            description: `${varName} ${t('script.param.description')}`
           }
         })
 
@@ -517,7 +517,7 @@ export default function ScriptManager() {
     // 为文件上传类型设置默认值
     if (type === 'upload_file') {
       newAction.file_paths = []
-      newAction.description = '上传文件'
+      newAction.description = t('script.action.uploadFileDefault')
     }
 
     setEditingActions([...editingActions, newAction])
@@ -547,7 +547,7 @@ export default function ScriptManager() {
 
   const handleExportScripts = () => {
     if (selectedScripts.size === 0) {
-      showMessage('请至少选择一个脚本', 'info')
+      showMessage(t('script.message.selectAtLeastOne'), 'info')
       return
     }
 
@@ -600,7 +600,7 @@ export default function ScriptManager() {
           try {
             // 创建新脚本，使用原有数据但生成新ID
             await api.createScript({
-              name: script.name + ' (导入)',
+              name: script.name + ' (imported)',
               description: script.description || '',
               url: script.url,
               actions: script.actions,
@@ -1230,7 +1230,7 @@ export default function ScriptManager() {
                                 setEditingScript({ ...editingScript, name: e.target.value })
                               }
                               className="input w-full font-bold"
-                              placeholder="脚本名称"
+                              placeholder={t('script.editor.scriptNamePlaceholder')}
                             />
                             <input
                               type="text"
@@ -1239,7 +1239,7 @@ export default function ScriptManager() {
                                 setEditingScript({ ...editingScript, url: e.target.value })
                               }
                               className="input w-full text-sm"
-                              placeholder="脚本URL"
+                              placeholder={t('script.editor.scriptUrlPlaceholder')}
                             />
                             <textarea
                               value={editingScript.description}
@@ -1247,7 +1247,7 @@ export default function ScriptManager() {
                                 setEditingScript({ ...editingScript, description: e.target.value })
                               }
                               className="input w-full text-sm"
-                              placeholder="脚本描述"
+                              placeholder={t('script.editor.scriptDescPlaceholder')}
                               rows={2}
                             />
                           </div>
@@ -1270,7 +1270,7 @@ export default function ScriptManager() {
                           </span>
                           <span className="flex items-center space-x-1">
                             <Clock className="w-3 h-3" />
-                            <span>{(script.duration / 1000).toFixed(1)}秒</span>
+                            <span>{(script.duration / 1000).toFixed(1)}{t('script.card.durationUnit')}</span>
                           </span>
                           {script.group && (
                             <span className="flex items-center space-x-1">
@@ -1386,84 +1386,84 @@ export default function ScriptManager() {
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200 flex items-center">
                             <FileCode className="w-5 h-5 mr-2" />
-                            操作步骤详情
+                            {t('script.editor.actionsTitle')}
                           </h4>
                           {isEditing && (
                             <div className="flex items-center space-x-1">
                               <button
                                 onClick={() => handleAddAction('click')}
                                 className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title="添加点击操作"
+                                title={t('script.editor.addClick')}
                               >
                                 + Click
                               </button>
                               <button
                                 onClick={() => handleAddAction('input')}
                                 className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title="添加输入操作"
+                                title={t('script.editor.addInput')}
                               >
                                 + Input
                               </button>
                               <button
                                 onClick={() => handleAddAction('select')}
                                 className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title="添加选择操作"
+                                title={t('script.editor.addSelect')}
                               >
                                 + Select
                               </button>
                               <button
                                 onClick={() => handleAddAction('navigate')}
                                 className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title="添加导航操作"
+                                title={t('script.editor.addNavigate')}
                               >
                                 + Navigate
                               </button>
                               <button
                                 onClick={() => handleAddAction('wait')}
                                 className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title="添加等待操作"
+                                title={t('script.editor.addWait')}
                               >
                                 + Wait
                               </button>
                               <button
                                 onClick={() => handleAddAction('sleep')}
                                 className="text-xs px-2 py-1 bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-300 rounded transition-colors"
-                                title="添加延迟操作"
+                                title={t('script.editor.addSleep')}
                               >
                                 + Sleep
                               </button>
                               <button
                                 onClick={() => handleAddAction('extract_text')}
                                 className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title="添加抓取文本操作"
+                                title={t('script.editor.addExtractText')}
                               >
                                 + Extract Text
                               </button>
                               <button
                                 onClick={() => handleAddAction('extract_html')}
                                 className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title="添加抓取HTML操作"
+                                title={t('script.editor.addExtractHtml')}
                               >
                                 + Extract HTML
                               </button>
                               <button
                                 onClick={() => handleAddAction('extract_attribute')}
                                 className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title="添加抓取属性操作"
+                                title={t('script.editor.addExtractAttr')}
                               >
                                 + Extract Attr
                               </button>
                               <button
                                 onClick={() => handleAddAction('execute_js')}
                                 className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                title="添加执行JS操作"
+                                title={t('script.editor.addExecuteJs')}
                               >
                                 + Execute JS
                               </button>
                               <button
                                 onClick={() => handleAddAction('upload_file')}
                                 className="text-xs px-2 py-1 bg-orange-100 dark:bg-orange-900 hover:bg-orange-200 dark:hover:bg-orange-800 text-orange-700 dark:text-orange-300 rounded transition-colors"
-                                title="添加文件上传操作"
+                                title={t('script.editor.addUploadFile')}
                               >
                                 + Upload File
                               </button>
@@ -1471,7 +1471,7 @@ export default function ScriptManager() {
                           )}
                         </div>
                         {(isEditing ? editingActions : script.actions).length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 italic">暂无操作步骤</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 italic">{t('script.editor.noActions')}</p>
                         ) : isEditing ? (
                           <DndContext
                             sensors={sensors}
@@ -1519,7 +1519,7 @@ export default function ScriptManager() {
       {totalScripts > pageSize && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            显示 {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalScripts)} / 共 {totalScripts} 个
+            {t('script.pagination.showing')} {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalScripts)} {t('script.pagination.of')} {t('script.pagination.total')} {totalScripts} {t('script.pagination.items')}
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -1527,17 +1527,17 @@ export default function ScriptManager() {
               disabled={currentPage === 1}
               className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              上一页
+              {t('script.pagination.prevPage')}
             </button>
             <span className="text-sm text-gray-600 dark:text-gray-400">
-              第 {currentPage} / {Math.ceil(totalScripts / pageSize)} 页
+              {t('script.pagination.page')} {currentPage} {t('script.pagination.of')} {Math.ceil(totalScripts / pageSize)} {t('script.pagination.totalPages')}
             </span>
             <button
               onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalScripts / pageSize), p + 1))}
               disabled={currentPage >= Math.ceil(totalScripts / pageSize)}
               className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              下一页
+              {t('script.pagination.nextPage')}
             </button>
           </div>
         </div>
@@ -1928,7 +1928,7 @@ export default function ScriptManager() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {mcpConfigScript.is_mcp_command ? '修改 MCP 命令' : '设置 MCP 命令'}
+                  {mcpConfigScript.is_mcp_command ? t('script.mcp.dialogTitle.edit') : t('script.mcp.dialogTitle.create')}
                 </h3>
                 <button
                   onClick={() => setShowMCPConfig(false)}
@@ -1941,7 +1941,7 @@ export default function ScriptManager() {
               <div className="space-y-5">
                 <div>
                   <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    脚本名称
+                    {t('script.mcp.scriptName')}
                   </label>
                   <input
                     type="text"
@@ -1953,28 +1953,28 @@ export default function ScriptManager() {
 
                 <div>
                   <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    MCP 命令名称 <span className="text-red-500 dark:text-red-400">*</span>
+                    {t('script.mcp.commandName')} <span className="text-red-500 dark:text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     value={mcpCommandName}
                     onChange={(e) => setMCPCommandName(e.target.value)}
-                    placeholder="例如: execute_login_script"
+                    placeholder={t('script.mcp.commandNamePlaceholder')}
                     className="w-full px-4 py-2.5 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   />
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    命令名称将用于 MCP 客户端调用,建议使用小写字母和下划线
+                    {t('script.mcp.commandNameHint')}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    MCP 命令描述
+                    {t('script.mcp.commandDescription')}
                   </label>
                   <textarea
                     value={mcpCommandDescription}
                     onChange={(e) => setMCPCommandDescription(e.target.value)}
-                    placeholder="描述这个命令的功能和用途..."
+                    placeholder={t('script.mcp.commandDescriptionPlaceholder')}
                     rows={3}
                     className="w-full px-4 py-2.5 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:focus:ring-purple-400 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   />
@@ -1987,26 +1987,12 @@ export default function ScriptManager() {
                   <textarea
                     value={mcpInputSchemaText}
                     onChange={(e) => setMCPInputSchemaText(e.target.value)}
-                    placeholder='留空表示无参数。示例 JSON Schema:
-{
-  "type": "object",
-  "properties": {
-    "username": {
-      "type": "string",
-      "description": "用户名"
-    },
-    "password": {
-      "type": "string",
-      "description": "密码"
-    }
-  },
-  "required": ["username"]
-}'
+                    placeholder={t('script.mcp.inputSchemaPlaceholder')}
                     rows={12}
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent font-mono text-sm leading-relaxed bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   />
                   <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    💡 系统已自动根据脚本中的变量生成参数定义，您可以根据需要修改
+                    {t('script.mcp.inputSchemaHint')}
                   </p>
                 </div>
 
@@ -2029,12 +2015,12 @@ export default function ScriptManager() {
                 </div>
 
                 <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                  <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">提示</h4>
+                  <h4 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">{t('script.mcp.tipsTitle')}</h4>
                   <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1.5">
-                    <li>• MCP 命令可以被外部 MCP 客户端调用</li>
-                    <li>• 每个脚本只能设置一个唯一的命令名称</li>
-                    <li>• 命令执行时会自动运行脚本的所有操作步骤</li>
-                    <li>• 参数定义使用 JSON Schema 格式,留空表示无参数</li>
+                    <li>• {t('script.mcp.tip1')}</li>
+                    <li>• {t('script.mcp.tip2')}</li>
+                    <li>• {t('script.mcp.tip3')}</li>
+                    <li>• {t('script.mcp.tip4')}</li>
                   </ul>
                 </div>
               </div>
@@ -2046,7 +2032,7 @@ export default function ScriptManager() {
                     disabled={loading}
                     className="px-5 py-2.5 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {loading ? t('script.editor.processing') : '取消 MCP 命令'}
+                    {loading ? t('script.editor.processing') : t('script.mcp.cancelCommand')}
                   </button>
                 )}
                 <button
@@ -2423,7 +2409,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             {action.type !== 'sleep' && action.type !== 'wait' && action.type !== 'execute_js' && action.type !== 'upload_file' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">选择器:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.selector')}</label>
                   <input
                     type="text"
                     value={action.selector}
@@ -2447,7 +2433,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             {action.type === 'upload_file' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">选择器:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.selector')}</label>
                   <input
                     type="text"
                     value={action.selector}
@@ -2467,7 +2453,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">文件路径 (每行一个):</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.filePaths')}</label>
                   <textarea
                     value={action.file_paths?.join('\n') || ''}
                     onChange={(e) => onUpdate(index, 'file_paths', e.target.value.split('\n').filter(p => p.trim()))}
@@ -2478,20 +2464,20 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('script.action.filePathHint')}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">描述:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.description')}</label>
                   <input
                     type="text"
                     value={action.description || ''}
                     onChange={(e) => onUpdate(index, 'description', e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="上传的文件说明"
+                    placeholder={t('script.action.uploadDesc')}
                   />
                 </div>
               </>
             )}
             {(action.type === 'input' || action.type === 'select') && (
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">值:</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.value')}</label>
                 <input
                   type="text"
                   value={action.value || ''}
@@ -2515,7 +2501,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             )}
             {action.type === 'sleep' && (
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">延迟时长 (毫秒):</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.delay')}</label>
                 <input
                   type="number"
                   value={action.duration || 1000}
@@ -2526,14 +2512,14 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   step="100"
                 />
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  约 {((action.duration || 1000) / 1000).toFixed(1)} 秒
+                  {t('script.pagination.showing')} {((action.duration || 1000) / 1000).toFixed(1)} {t('script.action.delaySeconds')}
                 </p>
               </div>
             )}
             {(action.type === 'extract_text' || action.type === 'extract_html' || action.type === 'extract_attribute') && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">变量名:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.variableName')}</label>
                   <input
                     type="text"
                     value={action.variable_name || ''}
@@ -2541,11 +2527,11 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                     className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="data_0"
                   />
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">用于存储抓取的数据</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('script.action.variableHint')}</p>
                 </div>
                 {action.type === 'extract_attribute' && (
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">属性名:</label>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.attributeName')}</label>
                     <input
                       type="text"
                       value={action.attribute_name || ''}
@@ -2560,7 +2546,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             {action.type === 'execute_js' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">JavaScript 代码:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{t('script.action.jsCode')}</label>
                   <div className="relative">
                     <textarea
                       value={action.js_code || ''}
@@ -2574,10 +2560,10 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                       JavaScript
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">💡 在页面上下文中执行，需要 return 返回值</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('script.action.jsHint')}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">变量名:</label>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.variableName')}</label>
                   <input
                     type="text"
                     value={action.variable_name || ''}
@@ -2594,7 +2580,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
           <button
             onClick={() => onDuplicate(index)}
             className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-            title="复制此步骤"
+            title={t('script.action.duplicateStep')}
           >
             <Copy className="w-5 h-5" />
           </button>
@@ -2618,6 +2604,8 @@ interface ActionItemViewProps {
 }
 
 function ActionItemView({ action, index }: ActionItemViewProps) {
+  const { t } = useLanguage()
+  
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-base shadow-sm">
       <div className="space-y-2">
@@ -2629,7 +2617,7 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
         </div>
         {action.selector && (
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">选择器:</span>{' '}
+            <span className="font-medium">{t('script.action.selector')}</span>{' '}
             <code className="bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-sm">{action.selector}</code>
           </div>
         )}
@@ -2641,7 +2629,7 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
         )}
         {action.value && (
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">值:</span>{' '}
+            <span className="font-medium">{t('script.action.value')}</span>{' '}
             <span className="text-gray-800 dark:text-gray-200">{action.value}</span>
           </div>
         )}
@@ -2653,21 +2641,21 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
         )}
         {action.type === 'sleep' && action.duration !== undefined && (
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">延迟:</span>{' '}
-            <span className="text-gray-800 dark:text-gray-200">{action.duration}ms ({(action.duration / 1000).toFixed(1)}秒)</span>
+            <span className="font-medium">{t('script.action.delay')}</span>{' '}
+            <span className="text-gray-800 dark:text-gray-200">{action.duration}ms ({(action.duration / 1000).toFixed(1)}{t('script.action.delaySeconds')})</span>
           </div>
         )}
         {(action.type === 'extract_text' || action.type === 'extract_html' || action.type === 'extract_attribute') && (
           <>
             {action.variable_name && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">变量名:</span>{' '}
+                <span className="font-medium">{t('script.action.variableName')}</span>{' '}
                 <code className="bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded text-sm">{action.variable_name}</code>
               </div>
             )}
             {action.type === 'extract_attribute' && action.attribute_name && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">属性名:</span>{' '}
+                <span className="font-medium">{t('script.action.attributeName')}</span>{' '}
                 <code className="bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-sm">{action.attribute_name}</code>
               </div>
             )}
@@ -2677,13 +2665,13 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
           <>
             {action.js_code && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">JS代码:</span>
+                <span className="font-medium">{t('script.action.jsCode')}</span>
                 <pre className="bg-gray-100 dark:bg-gray-900 px-3 py-2 rounded-lg mt-1 text-sm font-mono overflow-x-auto text-gray-900 dark:text-gray-100">{action.js_code}</pre>
               </div>
             )}
             {action.variable_name && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">变量名:</span>{' '}
+                <span className="font-medium">{t('script.action.variableName')}</span>{' '}
                 <code className="bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded text-sm">{action.variable_name}</code>
               </div>
             )}
@@ -2693,13 +2681,13 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
           <>
             {action.file_names && action.file_names.length > 0 && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">文件名:</span>{' '}
+                <span className="font-medium">{t('script.action.fileName')}</span>{' '}
                 <span className="text-gray-800 dark:text-gray-200">{action.file_names.join(', ')}</span>
               </div>
             )}
             {action.file_paths && action.file_paths.length > 0 && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">文件路径:</span>{' '}
+                <span className="font-medium">{t('script.action.filePath')}</span>{' '}
                 {action.file_paths.map((path, i) => (
                   <code key={i} className="bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-sm mr-1">{path}</code>
                 ))}
@@ -2707,19 +2695,19 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
             )}
             {action.description && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">描述:</span>{' '}
+                <span className="font-medium">{t('script.action.description')}</span>{' '}
                 <span className="text-gray-800 dark:text-gray-200">{action.description}</span>
               </div>
             )}
             {action.multiple && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">支持多文件:</span>{' '}
-                <span className="text-emerald-600 dark:text-emerald-400">是</span>
+                <span className="font-medium">{t('script.action.multipleFiles')}</span>{' '}
+                <span className="text-emerald-600 dark:text-emerald-400">{t('script.action.yes')}</span>
               </div>
             )}
             {action.accept && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">接受类型:</span>{' '}
+                <span className="font-medium">{t('script.action.acceptTypes')}</span>{' '}
                 <code className="bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-sm">{action.accept}</code>
               </div>
             )}
