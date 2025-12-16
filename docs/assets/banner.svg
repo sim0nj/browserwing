@@ -1,0 +1,26 @@
+<svg width="600" height="120" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="600" height="120" rx="12" fill="#ffffff"/>
+  <rect x="1" y="1" width="598" height="118" rx="11" fill="none" stroke="#e5e7eb" stroke-width="2"/>
+  
+  <!-- Icon: Browser with Wings -->
+  <g transform="translate(57, 20)">
+    <g transform="rotate(-15 14 14) scale(3.7)">
+      <!-- Browser window -->
+      <rect x="7" y="9" width="14" height="10" rx="2" stroke="#0f172a" stroke-width="2" fill="none"/>
+      <!-- Address bar -->
+      <line x1="9" y1="12" x2="19" y2="12" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <!-- Left wing -->
+      <path d="M7 13C5 12 3 11.5 1 12.5" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M7 14.5C5.5 14 4 13.5 2.5 14" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M7 16C6 15.5 5 15.5 4 16" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <!-- Right wing -->
+      <path d="M21 13C23 12 25 11.5 27 12.5" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M21 14.5C22.5 14 24 13.5 25.5 14" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M21 16C22 15.5 23 15.5 24 16" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round"/>
+    </g>
+  </g>
+  
+  <!-- Text: BrowserWing -->
+  <text x="177" y="75" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="56" font-weight="700" fill="#0f172a">BrowserWing</text>
+</svg>

@@ -1,28 +1,6 @@
-<div align="center" style="margin-top:12px">
-  <div style="background:#fff;border:1px solid #eaecef;border-radius:12px;padding:16px 20px;display:inline-block;">
-    <table style="border-collapse:collapse;">
-      <tr>
-        <td>
-          <svg width="96" height="96" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:#0f172a">
-            <g transform="rotate(-15 14 14)">
-              <rect x="7" y="9" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none" />
-              <line x1="9" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M7 13C5 12 3 11.5 1 12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M7 14.5C5.5 14 4 13.5 2.5 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M7 16C6 15.5 5 15.5 4 16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M21 13C23 12 25 11.5 27 12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M21 14.5C22.5 14 24 13.5 25.5 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              <path d="M21 16C22 15.5 23 15.5 24 16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </g>
-          </svg>
-        </td>
-        <td style="padding-left:16px; vertical-align:middle;">
-          <h1 style="margin:0; font-size:46px; line-height:1; color:#0f172a">BrowserWing</h1>
-        </td>
-      </tr>
-    </table>
-  </div>
-</div>
+<p align="center">
+  <img width="600" alt="BrowserWing" src="https://raw.githubusercontent.com/browserwing/browserwing/main/docs/assets/banner.svg">
+</p>
 
 <p align="center">
   <a href="./README.md">English</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.es.md">Español</a> · Português
@@ -45,7 +23,7 @@
 
 ### Opção A — Baixar Release (recomendado)
 
-- Baixe o binário pré-compilado para seu sistema em Releases.
+- Baixe o binário pré-compilado para seu sistema em [Releases](https://github.com/browserwing/browserwing/releases).
 - Execute o app e abra `http://localhost:8080`.
 
 ```bash
@@ -110,9 +88,15 @@ flowchart LR
 - Issues e PRs são bem-vindos. Inclua passos de reprodução ou motivação clara.
 - Para novas funcionalidades, abra uma discussão com casos de uso e resultados esperados.
 
+## Comunidade
+
+Discord: [https://discord.gg/BkqcApRj](https://discord.gg/BkqcApRj)
+twitter: [https://x.com/chg80333](https://x.com/chg80333)
+
 ## Agradecimentos
 
 - Inspirado por automação de navegador moderna, fluxos agentic e MCP.
+
 ## Licença
 
 - Licença MIT. Veja `LICENSE`.
