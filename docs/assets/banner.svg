@@ -4,7 +4,7 @@
   <rect x="1" y="1" width="598" height="118" rx="11" fill="none" stroke="#e5e7eb" stroke-width="2"/>
   
   <!-- Icon: Browser with Wings -->
-  <g transform="translate(57, 20)">
+  <g transform="translate(52, 20)">
     <g transform="rotate(-15 14 14) scale(3.7)">
       <!-- Browser window -->
       <rect x="7" y="9" width="14" height="10" rx="2" stroke="#0f172a" stroke-width="2" fill="none"/>
@@ -22,5 +22,5 @@
   </g>
   
   <!-- Text: BrowserWing -->
-  <text x="177" y="75" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="56" font-weight="700" fill="#0f172a">BrowserWing</text>
+  <text x="172" y="79" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="56" font-weight="700" fill="#0f172a">BrowserWing</text>
 </svg>
