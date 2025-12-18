@@ -228,6 +228,7 @@ export interface Script {
 }
 
 export interface SaveScriptRequest {
+  id: string
   name: string
   description: string
   url: string

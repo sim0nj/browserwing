@@ -296,6 +296,7 @@ func (h *Handler) ClearInPageRecordingState(c *gin.Context) {
 // SaveScript 保存脚本
 func (h *Handler) SaveScript(c *gin.Context) {
 	var req struct {
+		ID          string                `json:"id"` // 可选，更新时使用
 		Name        string                `json:"name" binding:"required"`
 		Description string                `json:"description"`
 		URL         string                `json:"url" binding:"required"`
@@ -314,8 +315,13 @@ func (h *Handler) SaveScript(c *gin.Context) {
 		duration = req.Actions[len(req.Actions)-1].Timestamp - req.Actions[0].Timestamp
 	}
 
+	id := req.ID
+	if id == "" {
+		id = uuid.New().String()
+	}
+
 	script := &models.Script{
-		ID:          uuid.New().String(),
+		ID:          id,
 		Name:        req.Name,
 		Description: req.Description,
 		URL:         req.URL,

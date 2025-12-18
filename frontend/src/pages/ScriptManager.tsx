@@ -42,7 +42,7 @@ export default function ScriptManager() {
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info')
   const [selectedScripts, setSelectedScripts] = useState<Set<string>>(new Set())
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; scriptId: string | null }>({ show: false, scriptId: null })
-  
+
   // 分页和过滤
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(20)
@@ -192,7 +192,7 @@ export default function ScriptManager() {
       setShowExtractedData(false)
       const response = await api.playScript(scriptId, params)
       showMessage(t(response.data.message), 'success')
-      
+
       // 检查是否有抓取的数据
       if (response.data.result && response.data.result.extracted_data) {
         const data = response.data.result.extracted_data
@@ -304,7 +304,7 @@ export default function ScriptManager() {
 
     try {
       setLoading(true)
-      
+
       // 解析 input schema JSON
       let inputSchema: Record<string, any> | undefined
       if (mcpInputSchemaText.trim()) {
@@ -316,7 +316,7 @@ export default function ScriptManager() {
           return
         }
       }
-      
+
       const response = await api.toggleScriptMCPCommand(mcpConfigScript.id, {
         is_mcp_command: true,
         mcp_command_name: mcpCommandName,
@@ -503,7 +503,7 @@ export default function ScriptManager() {
       url: '',
       duration: type === 'sleep' ? 1000 : undefined,
     }
-    
+
     // 为数据抓取类型设置默认值
     if (type === 'extract_text' || type === 'extract_html' || type === 'extract_attribute') {
       newAction.variable_name = `data_${editingActions.length}`
@@ -512,13 +512,13 @@ export default function ScriptManager() {
         newAction.attribute_name = 'href'
       }
     }
-    
+
     // 为执行 JS 类型设置默认值
     if (type === 'execute_js') {
       newAction.variable_name = `result_${editingActions.length}`
       newAction.js_code = 'return document.title;'
     }
-    
+
     // 为文件上传类型设置默认值
     if (type === 'upload_file') {
       newAction.file_paths = []
@@ -591,7 +591,7 @@ export default function ScriptManager() {
       try {
         const text = await file.text()
         const data = JSON.parse(text)
-        
+
         if (!data.scripts || !Array.isArray(data.scripts)) {
           showMessage(t('script.messages.invalidFormat'), 'error')
           return
@@ -601,7 +601,7 @@ export default function ScriptManager() {
         const existingIds = new Set(scripts.map(s => s.id))
         const duplicateIds = data.scripts
           .filter((script: any) => script.id && existingIds.has(script.id))
-          .map((script: any) => script.id)
+          .map((script: any) => script.name)
 
         if (duplicateIds.length > 0) {
           // 有重复ID，显示确认对话框
@@ -626,6 +626,7 @@ export default function ScriptManager() {
       let successCount = 0
       let failCount = 0
       const existingIds = new Set(scripts.map(s => s.id))
+      const existingNames = new Set(scripts.map(s => s.name))
 
       for (const script of data.scripts) {
         try {
@@ -640,8 +641,18 @@ export default function ScriptManager() {
             successCount++
           } else {
             // 创建新脚本
+            // 检查名称是否重复，重复则添加后缀
+            const scriptName = existingNames.has(script.name)
+              ? script.name + t('script.imported')
+              : script.name
+
+            const scriptID = existingIds.has(script.id)
+              ? ''
+              : script.id
+
             await api.createScript({
-              name: script.name + t('script.imported'),
+              id: scriptID,
+              name: scriptName,
               description: script.description || '',
               url: script.url,
               actions: script.actions,
@@ -658,7 +669,7 @@ export default function ScriptManager() {
       }
 
       await loadScripts()
-      
+
       if (failCount === 0) {
         showMessage(t('script.importSuccess', { count: successCount }), 'success')
       } else {
@@ -888,7 +899,7 @@ export default function ScriptManager() {
     })
   }
 
-  const totalPages = activeTab === 'scripts' 
+  const totalPages = activeTab === 'scripts'
     ? Math.ceil(totalScripts / pageSize)
     : Math.ceil(totalExecutions / pageSize)
 
@@ -900,7 +911,7 @@ export default function ScriptManager() {
           <div>
             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100">{t('script.title')}</h1>
             <p className="text-[15px] text-gray-600 dark:text-gray-400 mt-2">
-              {activeTab === 'scripts' 
+              {activeTab === 'scripts'
                 ? `${t('script.subtitle')} (${t('script.total', { count: totalScripts })})`
                 : t('execution.subtitle')
               }
@@ -962,8 +973,8 @@ export default function ScriptManager() {
             <button
               onClick={() => { setActiveTab('scripts'); setCurrentPage(1); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'scripts'
-                  ? 'border-gray-900 text-gray-900 dark:text-gray-100 dark:border-gray-100'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 dark:hover:border-gray-700'
+                ? 'border-gray-900 text-gray-900 dark:text-gray-100 dark:border-gray-100'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 dark:hover:border-gray-700'
                 }`}
             >
               <div className="flex items-center space-x-2">
@@ -977,8 +988,8 @@ export default function ScriptManager() {
             <button
               onClick={() => { setActiveTab('executions'); setCurrentPage(1); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'executions'
-                  ? 'border-gray-900 text-gray-900 dark:text-gray-100 dark:border-gray-100'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 dark:hover:border-gray-700'
+                ? 'border-gray-900 text-gray-900 dark:text-gray-100 dark:border-gray-100'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:hover:text-gray-300 dark:hover:border-gray-700'
                 }`}
             >
               <div className="flex items-center space-x-2">
@@ -995,105 +1006,105 @@ export default function ScriptManager() {
         {/* 脚本列表的过滤和批量操作栏 */}
         {activeTab === 'scripts' && (
           <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-4">
-            {/* 搜索框 */}
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                placeholder={t('script.search.placeholder')}
-                className="pl-3 pr-8 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => { setSearchQuery(''); setCurrentPage(1); }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+            <div className="flex items-center space-x-4">
+              {/* 搜索框 */}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                  placeholder={t('script.search.placeholder')}
+                  className="pl-3 pr-8 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setCurrentPage(1); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* 分组过滤 */}
+              <div className="flex items-center space-x-2">
+                <select
+                  value={filterGroup}
+                  onChange={(e) => { setFilterGroup(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 >
-                  <X className="w-4 h-4" />
+                  <option value="">{t('script.filter.allGroups')}</option>
+                  {availableGroups.map(group => (
+                    <option key={group} value={group}>{group}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 标签过滤 */}
+              <div className="flex items-center space-x-2">
+                <select
+                  value={filterTag}
+                  onChange={(e) => { setFilterTag(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">{t('script.filter.allTags')}</option>
+                  {availableTags.map(tag => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(filterGroup || filterTag || searchQuery) && (
+                <button
+                  onClick={() => { setFilterGroup(''); setFilterTag(''); setSearchQuery(''); setCurrentPage(1); }}
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 underline"
+                >
+                  {t('script.filter.clear')}
                 </button>
               )}
             </div>
 
-            {/* 分组过滤 */}
-            <div className="flex items-center space-x-2">
-              <select
-                value={filterGroup}
-                onChange={(e) => { setFilterGroup(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              >
-                <option value="">{t('script.filter.allGroups')}</option>
-                {availableGroups.map(group => (
-                  <option key={group} value={group}>{group}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 标签过滤 */}
-            <div className="flex items-center space-x-2">
-              <select
-                value={filterTag}
-                onChange={(e) => { setFilterTag(e.target.value); setCurrentPage(1); }}
-                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              >
-                <option value="">{t('script.filter.allTags')}</option>
-                {availableTags.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </select>
-            </div>
-
-            {(filterGroup || filterTag || searchQuery) && (
-              <button
-                onClick={() => { setFilterGroup(''); setFilterTag(''); setSearchQuery(''); setCurrentPage(1); }}
-                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 underline"
-              >
-                {t('script.filter.clear')}
-              </button>
+            {/* 批量操作 */}
+            {selectedScripts.size > 0 && (
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('script.selected', { count: selectedScripts.size })}
+                </span>
+                <button
+                  onClick={() => setShowBatchGroupDialog(true)}
+                  className="btn-secondary text-sm flex items-center space-x-1.5"
+                  disabled={loading}
+                >
+                  <Folder className="w-4 h-4" />
+                  <span>{t('script.batch.setGroup')}</span>
+                </button>
+                <button
+                  onClick={() => setShowBatchTagDialog(true)}
+                  className="btn-secondary text-sm flex items-center space-x-1.5"
+                  disabled={loading}
+                >
+                  <Tag className="w-4 h-4" />
+                  <span>{t('script.batch.addTags')}</span>
+                </button>
+                <button
+                  onClick={handleExportScripts}
+                  className="btn-secondary text-sm flex items-center space-x-1.5"
+                  disabled={loading}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t('common.export')}</span>
+                </button>
+                <button
+                  onClick={handleBatchDelete}
+                  className="btn-secondary text-sm text-red-600 hover:bg-red-50 flex items-center space-x-1.5"
+                  disabled={loading}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{t('common.delete')}</span>
+                </button>
+              </div>
             )}
           </div>
-
-          {/* 批量操作 */}
-          {selectedScripts.size > 0 && (
-            <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {t('script.selected', { count: selectedScripts.size })}
-              </span>
-              <button
-                onClick={() => setShowBatchGroupDialog(true)}
-                className="btn-secondary text-sm flex items-center space-x-1.5"
-                disabled={loading}
-              >
-                <Folder className="w-4 h-4" />
-                <span>{t('script.batch.setGroup')}</span>
-              </button>
-              <button
-                onClick={() => setShowBatchTagDialog(true)}
-                className="btn-secondary text-sm flex items-center space-x-1.5"
-                disabled={loading}
-              >
-                <Tag className="w-4 h-4" />
-                <span>{t('script.batch.addTags')}</span>
-              </button>
-              <button
-                onClick={handleExportScripts}
-                className="btn-secondary text-sm flex items-center space-x-1.5"
-                disabled={loading}
-              >
-                <Download className="w-4 h-4" />
-                <span>{t('common.export')}</span>
-              </button>
-              <button
-                onClick={handleBatchDelete}
-                className="btn-secondary text-sm text-red-600 hover:bg-red-50 flex items-center space-x-1.5"
-                disabled={loading}
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>{t('common.delete')}</span>
-              </button>
-            </div>
-          )}
-        </div>
         )}
       </div>
 
@@ -1135,7 +1146,7 @@ export default function ScriptManager() {
               <X className="w-4 h-4" />
             </button>
           </div>
-          
+
           <div className="space-y-3">
             {Object.entries(extractedData).map(([key, value]) => (
               <div
@@ -1154,7 +1165,7 @@ export default function ScriptManager() {
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-900 rounded p-3 overflow-auto max-h-40">
                       <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-all font-mono">
-                        {typeof value === 'object' 
+                        {typeof value === 'object'
                           ? JSON.stringify(value, null, 2)
                           : String(value)}
                       </pre>
@@ -1162,7 +1173,7 @@ export default function ScriptManager() {
                   </div>
                   <button
                     onClick={() => {
-                      const textValue = typeof value === 'object' 
+                      const textValue = typeof value === 'object'
                         ? JSON.stringify(value, null, 2)
                         : String(value)
                       navigator.clipboard.writeText(textValue)
@@ -1223,380 +1234,378 @@ export default function ScriptManager() {
       {/* Scripts List */}
       {activeTab === 'scripts' && (
         <>
-      <div className="card">
-        {scripts.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            <FileCode className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium">{t('script.noScripts')}</p>
-            <p className="text-sm mt-2">{t('script.noScriptsHint')}</p>
-          </div>
-        ) : (
-          <>
-            {/* 全选按钮 */}
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200 dark:border-gray-700">
-              <button
-                onClick={toggleSelectAll}
-                className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary-600 transition-colors"
-              >
-                {selectedScripts.size === scripts.length ? (
-                  <CheckSquare className="w-4 h-4" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-                  <span>{selectedScripts.size === scripts.length ? t('script.deselectAll') : t('script.selectAll')}</span>
-              </button>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{t('script.total', { count: scripts.length })}</span>
-            </div>
-            <div className="space-y-3">
-            {scripts.map((script) => {
-              const isExpanded = expandedScriptId === script.id
-              const isEditing = editingScript?.id === script.id
-
-              return (
-                <div
-                  key={script.id}
-                  className={`bg-gray-50 dark:bg-gray-900 rounded-lg border-2 transition-colors ${
-                    selectedScripts.has(script.id)
-                      ? 'border-primary-400 bg-primary-50/30 dark:bg-primary-900/30'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start justify-between">
-                      {/* 选择框 */}
-                      <button
-                        onClick={() => toggleScriptSelection(script.id)}
-                        className="p-1 mr-3 mt-1 text-gray-600 dark:text-gray-400 hover:text-primary-600 transition-colors"
-                        title={selectedScripts.has(script.id) ? t('script.card.deselect') : t('script.card.select')}
-                      >
-                        {selectedScripts.has(script.id) ? (
-                          <CheckSquare className="w-5 h-5 text-primary-600" />
-                        ) : (
-                          <Square className="w-5 h-5" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        {isEditing ? (
-                          <div className="space-y-2 mb-2">
-                            <input
-                              type="text"
-                              value={editingScript.name}
-                              onChange={(e) =>
-                                setEditingScript({ ...editingScript, name: e.target.value })
-                              }
-                              className="input w-full font-bold"
-                              placeholder={t('script.editor.scriptNamePlaceholder')}
-                            />
-                            <input
-                              type="text"
-                              value={editingScript.url}
-                              onChange={(e) =>
-                                setEditingScript({ ...editingScript, url: e.target.value })
-                              }
-                              className="input w-full text-sm"
-                              placeholder={t('script.editor.scriptUrlPlaceholder')}
-                            />
-                            <textarea
-                              value={editingScript.description}
-                              onChange={(e) =>
-                                setEditingScript({ ...editingScript, description: e.target.value })
-                              }
-                              className="input w-full text-sm"
-                              placeholder={t('script.editor.scriptDescPlaceholder')}
-                              rows={2}
-                            />
-                          </div>
-                        ) : (
-                          <>
-                            <h3 className="font-bold text-gray-900 dark:text-gray-100">{script.name}</h3>
-                            {script.description && (
-                              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{script.description}</p>
-                            )}
-                          </>
-                        )}
-                        <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span className="flex items-center space-x-1">
-                            <ExternalLink className="w-3 h-3" />
-                            <span className="truncate max-w-xs">{script.url}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <FileCode className="w-3 h-3" />
-                            <span>{t('script.card.actionsCount', { count: script.actions.length })}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{(script.duration / 1000).toFixed(1)}{t('script.card.durationUnit')}</span>
-                          </span>
-                          {script.group && (
-                            <span className="flex items-center space-x-1">
-                              <Folder className="w-3 h-3" />
-                              <span>{script.group}</span>
-                            </span>
-                          )}
-                        </div>
-                        {script.tags && script.tags.length > 0 && (
-                          <div className="flex items-center space-x-2 mt-2">
-                            <Tag className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-                            {script.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="px-2 py-0.5 bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300 text-xs rounded border border-gray-200 dark:border-gray-600"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        <button
-                          onClick={() => toggleScriptExpand(script.id)}
-                          className="p-2 text-gray-600 hover:bg-gray-200 rounded transition-colors"
-                          title={isExpanded ? t('script.card.collapse') : t('script.card.expand')}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                        {isEditing ? (
-                          <>
-                            <button
-                              onClick={handleSaveEditedScript}
-                              disabled={loading}
-                              className="btn-primary p-2"
-                              title={t('script.card.saveEdit')}
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingScript(null)
-                                setEditingActions([])
-                              }}
-                              disabled={loading}
-                              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                              title={t('script.card.cancelEdit')}
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => handleEditScript(script)}
-                              disabled={loading}
-                              className="p-2 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                                title={t('script.card.editScript')}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handlePlayScript(script.id)}
-                              disabled={loading}
-                              className="btn-primary p-2"
-                                title={t('script.card.playScript')}
-                            >
-                              <Play className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleCopyCurl(script.id)}
-                                disabled={loading}
-                                className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                                title={t('script.card.copyCurl')}
-                              >
-                                <Clipboard className="w-4 h-4" />
-                              </button>
-                              <button
-                              onClick={() => handleToggleMCP(script.id)}
-                              disabled={loading}
-                              className={`p-2 rounded transition-colors ${
-                                script.is_mcp_command
-                                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                              }`}
-                                title={script.is_mcp_command ? t('script.card.mcpCancel', { name: script.mcp_command_name || '' }) : t('script.card.mcpSet')}
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => setDeleteConfirm({ show: true, scriptId: script.id })}
-                              disabled={loading}
-                              className="btn-danger p-2"
-                                title={t('script.card.deleteScript')}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded Actions List */}
-                  {isExpanded && (
-                    <div className="border-t border-gray-200 dark:border-gray-700 px-4 pb-4">
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200 flex items-center">
-                            <FileCode className="w-5 h-5 mr-2" />
-                            {t('script.editor.actionsTitle')}
-                          </h4>
-                          {isEditing && (
-                            <div className="flex items-center space-x-1">
-                              <button
-                                onClick={() => handleAddAction('click')}
-                                className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title={t('script.editor.addClick')}
-                              >
-                                + Click
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('input')}
-                                className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title={t('script.editor.addInput')}
-                              >
-                                + Input
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('select')}
-                                className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title={t('script.editor.addSelect')}
-                              >
-                                + Select
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('navigate')}
-                                className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title={t('script.editor.addNavigate')}
-                              >
-                                + Navigate
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('wait')}
-                                className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                                title={t('script.editor.addWait')}
-                              >
-                                + Wait
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('sleep')}
-                                className="text-xs px-2 py-1 bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-300 rounded transition-colors"
-                                title={t('script.editor.addSleep')}
-                              >
-                                + Sleep
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('extract_text')}
-                                className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title={t('script.editor.addExtractText')}
-                              >
-                                + Extract Text
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('extract_html')}
-                                className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title={t('script.editor.addExtractHtml')}
-                              >
-                                + Extract HTML
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('extract_attribute')}
-                                className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
-                                title={t('script.editor.addExtractAttr')}
-                              >
-                                + Extract Attr
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('execute_js')}
-                                className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
-                                title={t('script.editor.addExecuteJs')}
-                              >
-                                + Execute JS
-                              </button>
-                              <button
-                                onClick={() => handleAddAction('upload_file')}
-                                className="text-xs px-2 py-1 bg-orange-100 dark:bg-orange-900 hover:bg-orange-200 dark:hover:bg-orange-800 text-orange-700 dark:text-orange-300 rounded transition-colors"
-                                title={t('script.editor.addUploadFile')}
-                              >
-                                + Upload File
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        {(isEditing ? editingActions : script.actions).length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 italic">{t('script.editor.noActions')}</p>
-                        ) : isEditing ? (
-                          <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={handleDragEnd}
-                          >
-                            <SortableContext
-                              items={editingActions.map((_, i) => i.toString())}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              <div className="space-y-2">
-                                {editingActions.map((action, index) => (
-                                  <SortableActionItem
-                                    key={index}
-                                    id={index.toString()}
-                                    action={action}
-                                    index={index}
-                                    onUpdate={handleUpdateActionValue}
-                                    onDelete={handleDeleteAction}
-                                    onDuplicate={handleDuplicateAction}
-                                  />
-                                ))}
-                              </div>
-                            </SortableContext>
-                          </DndContext>
-                        ) : (
-                          <div className="space-y-2">
-                            {script.actions.map((action, index) => (
-                              <ActionItemView key={index} action={action} index={index} />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+          <div className="card">
+            {scripts.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <FileCode className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">{t('script.noScripts')}</p>
+                <p className="text-sm mt-2">{t('script.noScriptsHint')}</p>
+              </div>
+            ) : (
+              <>
+                {/* 全选按钮 */}
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary-600 transition-colors"
+                  >
+                    {selectedScripts.size === scripts.length ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                    <span>{selectedScripts.size === scripts.length ? t('script.deselectAll') : t('script.selectAll')}</span>
+                  </button>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{t('script.total', { count: scripts.length })}</span>
                 </div>
-              )
-            })}
-          </div>
-          </>
-        )}
-      </div>
+                <div className="space-y-3">
+                  {scripts.map((script) => {
+                    const isExpanded = expandedScriptId === script.id
+                    const isEditing = editingScript?.id === script.id
 
-      {/* 分页控件 */}
-      {totalScripts > pageSize && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {t('script.pagination.showing')} {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalScripts)} {t('script.pagination.of')} {t('script.pagination.total')} {totalScripts} {t('script.pagination.items')}
+                    return (
+                      <div
+                        key={script.id}
+                        className={`bg-gray-50 dark:bg-gray-900 rounded-lg border-2 transition-colors ${selectedScripts.has(script.id)
+                          ? 'border-primary-400 bg-primary-50/30 dark:bg-primary-900/30'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
+                      >
+                        <div className="p-4">
+                          <div className="flex items-start justify-between">
+                            {/* 选择框 */}
+                            <button
+                              onClick={() => toggleScriptSelection(script.id)}
+                              className="p-1 mr-3 mt-1 text-gray-600 dark:text-gray-400 hover:text-primary-600 transition-colors"
+                              title={selectedScripts.has(script.id) ? t('script.card.deselect') : t('script.card.select')}
+                            >
+                              {selectedScripts.has(script.id) ? (
+                                <CheckSquare className="w-5 h-5 text-primary-600" />
+                              ) : (
+                                <Square className="w-5 h-5" />
+                              )}
+                            </button>
+                            <div className="flex-1">
+                              {isEditing ? (
+                                <div className="space-y-2 mb-2">
+                                  <input
+                                    type="text"
+                                    value={editingScript.name}
+                                    onChange={(e) =>
+                                      setEditingScript({ ...editingScript, name: e.target.value })
+                                    }
+                                    className="input w-full font-bold"
+                                    placeholder={t('script.editor.scriptNamePlaceholder')}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editingScript.url}
+                                    onChange={(e) =>
+                                      setEditingScript({ ...editingScript, url: e.target.value })
+                                    }
+                                    className="input w-full text-sm"
+                                    placeholder={t('script.editor.scriptUrlPlaceholder')}
+                                  />
+                                  <textarea
+                                    value={editingScript.description}
+                                    onChange={(e) =>
+                                      setEditingScript({ ...editingScript, description: e.target.value })
+                                    }
+                                    className="input w-full text-sm"
+                                    placeholder={t('script.editor.scriptDescPlaceholder')}
+                                    rows={2}
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <h3 className="font-bold text-gray-900 dark:text-gray-100">{script.name}</h3>
+                                  {script.description && (
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{script.description}</p>
+                                  )}
+                                </>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center space-x-1">
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span className="truncate max-w-xs">{script.url}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <FileCode className="w-3 h-3" />
+                                  <span>{t('script.card.actionsCount', { count: script.actions.length })}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{(script.duration / 1000).toFixed(1)}{t('script.card.durationUnit')}</span>
+                                </span>
+                                {script.group && (
+                                  <span className="flex items-center space-x-1">
+                                    <Folder className="w-3 h-3" />
+                                    <span>{script.group}</span>
+                                  </span>
+                                )}
+                              </div>
+                              {script.tags && script.tags.length > 0 && (
+                                <div className="flex items-center space-x-2 mt-2">
+                                  <Tag className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                                  {script.tags.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="px-2 py-0.5 bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300 text-xs rounded border border-gray-200 dark:border-gray-600"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2 ml-4">
+                              <button
+                                onClick={() => toggleScriptExpand(script.id)}
+                                className="p-2 text-gray-600 hover:bg-gray-200 rounded transition-colors"
+                                title={isExpanded ? t('script.card.collapse') : t('script.card.expand')}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4" />
+                                )}
+                              </button>
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={handleSaveEditedScript}
+                                    disabled={loading}
+                                    className="btn-primary p-2"
+                                    title={t('script.card.saveEdit')}
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingScript(null)
+                                      setEditingActions([])
+                                    }}
+                                    disabled={loading}
+                                    className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                    title={t('script.card.cancelEdit')}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleEditScript(script)}
+                                    disabled={loading}
+                                    className="p-2 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                                    title={t('script.card.editScript')}
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handlePlayScript(script.id)}
+                                    disabled={loading}
+                                    className="btn-primary p-2"
+                                    title={t('script.card.playScript')}
+                                  >
+                                    <Play className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleCopyCurl(script.id)}
+                                    disabled={loading}
+                                    className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                                    title={t('script.card.copyCurl')}
+                                  >
+                                    <Clipboard className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleMCP(script.id)}
+                                    disabled={loading}
+                                    className={`p-2 rounded transition-colors ${script.is_mcp_command
+                                      ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                                      }`}
+                                    title={script.is_mcp_command ? t('script.card.mcpCancel', { name: script.mcp_command_name || '' }) : t('script.card.mcpSet')}
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirm({ show: true, scriptId: script.id })}
+                                    disabled={loading}
+                                    className="btn-danger p-2"
+                                    title={t('script.card.deleteScript')}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded Actions List */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 px-4 pb-4">
+                            <div className="mt-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200 flex items-center">
+                                  <FileCode className="w-5 h-5 mr-2" />
+                                  {t('script.editor.actionsTitle')}
+                                </h4>
+                                {isEditing && (
+                                  <div className="flex items-center space-x-1">
+                                    <button
+                                      onClick={() => handleAddAction('click')}
+                                      className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                      title={t('script.editor.addClick')}
+                                    >
+                                      + Click
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('input')}
+                                      className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                      title={t('script.editor.addInput')}
+                                    >
+                                      + Input
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('select')}
+                                      className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                      title={t('script.editor.addSelect')}
+                                    >
+                                      + Select
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('navigate')}
+                                      className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                      title={t('script.editor.addNavigate')}
+                                    >
+                                      + Navigate
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('wait')}
+                                      className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                      title={t('script.editor.addWait')}
+                                    >
+                                      + Wait
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('sleep')}
+                                      className="text-xs px-2 py-1 bg-emerald-100 dark:bg-emerald-900 hover:bg-emerald-200 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-300 rounded transition-colors"
+                                      title={t('script.editor.addSleep')}
+                                    >
+                                      + Sleep
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('extract_text')}
+                                      className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
+                                      title={t('script.editor.addExtractText')}
+                                    >
+                                      + Extract Text
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('extract_html')}
+                                      className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
+                                      title={t('script.editor.addExtractHtml')}
+                                    >
+                                      + Extract HTML
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('extract_attribute')}
+                                      className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded transition-colors"
+                                      title={t('script.editor.addExtractAttr')}
+                                    >
+                                      + Extract Attr
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('execute_js')}
+                                      className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
+                                      title={t('script.editor.addExecuteJs')}
+                                    >
+                                      + Execute JS
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('upload_file')}
+                                      className="text-xs px-2 py-1 bg-orange-100 dark:bg-orange-900 hover:bg-orange-200 dark:hover:bg-orange-800 text-orange-700 dark:text-orange-300 rounded transition-colors"
+                                      title={t('script.editor.addUploadFile')}
+                                    >
+                                      + Upload File
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              {(isEditing ? editingActions : script.actions).length === 0 ? (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 italic">{t('script.editor.noActions')}</p>
+                              ) : isEditing ? (
+                                <DndContext
+                                  sensors={sensors}
+                                  collisionDetection={closestCenter}
+                                  onDragEnd={handleDragEnd}
+                                >
+                                  <SortableContext
+                                    items={editingActions.map((_, i) => i.toString())}
+                                    strategy={verticalListSortingStrategy}
+                                  >
+                                    <div className="space-y-2">
+                                      {editingActions.map((action, index) => (
+                                        <SortableActionItem
+                                          key={index}
+                                          id={index.toString()}
+                                          action={action}
+                                          index={index}
+                                          onUpdate={handleUpdateActionValue}
+                                          onDelete={handleDeleteAction}
+                                          onDuplicate={handleDuplicateAction}
+                                        />
+                                      ))}
+                                    </div>
+                                  </SortableContext>
+                                </DndContext>
+                              ) : (
+                                <div className="space-y-2">
+                                  {script.actions.map((action, index) => (
+                                    <ActionItemView key={index} action={action} index={index} />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('script.pagination.prevPage')}
-            </button>
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {t('script.pagination.page')} {currentPage} {t('script.pagination.of')} {Math.ceil(totalScripts / pageSize)} {t('script.pagination.totalPages')}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalScripts / pageSize), p + 1))}
-              disabled={currentPage >= Math.ceil(totalScripts / pageSize)}
-              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('script.pagination.nextPage')}
-            </button>
-          </div>
-        </div>
-      )}
+
+          {/* 分页控件 */}
+          {totalScripts > pageSize && (
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalScripts)} {t('script.pagination.of')} {t('script.pagination.total')} {totalScripts} {t('script.pagination.items')}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('script.pagination.prevPage')}
+                </button>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {currentPage} {t('script.pagination.of')} {Math.ceil(totalScripts / pageSize)} {t('script.pagination.totalPages')}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalScripts / pageSize), p + 1))}
+                  disabled={currentPage >= Math.ceil(totalScripts / pageSize)}
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('script.pagination.nextPage')}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1790,7 +1799,7 @@ export default function ScriptManager() {
                                       <img src={execution.video_path} alt="Execution Video" className="max-w-full h-auto rounded-md" />
                                     </div>
                                   </div>
-                                )}                              
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -2286,7 +2295,7 @@ export default function ScriptManager() {
                 </button>
               </div>
             </div>
-            
+
             {/* Scrollable Content */}
             <div className="p-6 overflow-y-auto flex-1">
               <div className="space-y-6">
@@ -2341,7 +2350,7 @@ export default function ScriptManager() {
                         <h5 className="font-medium text-gray-800 dark:text-gray-200 mb-1">{t('script.tutorial.mcp.integration')}</h5>
                         <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{t('script.tutorial.mcp.integrationDesc')}</p>
                         <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
-                          <div 
+                          <div
                             className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
                             onClick={() => navigator.clipboard.writeText(JSON.stringify({
                               mcpServers: {
@@ -2365,7 +2374,7 @@ export default function ScriptManager() {
   }
 }`}
                             </pre>
-                          </div>                          
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2705,7 +2714,7 @@ interface ActionItemViewProps {
 
 function ActionItemView({ action, index }: ActionItemViewProps) {
   const { t } = useLanguage()
-  
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-base shadow-sm">
       <div className="space-y-2">

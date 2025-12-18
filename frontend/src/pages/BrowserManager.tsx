@@ -310,6 +310,7 @@ export default function BrowserManager() {
     try {
       setSavingScript(true)
       const response = await api.saveScript({
+        id: '',
         name: scriptName,
         description: scriptDescription,
         url: recordingStatus.start_url || openUrl,
