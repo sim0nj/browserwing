@@ -41,6 +41,7 @@ https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
 
 ```bash
 # Linux/macOS
+chmod +x ./browserwing
 ./browserwing --port 8080
 
 # Windows (PowerShell)

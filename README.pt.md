@@ -28,6 +28,7 @@
 
 ```bash
 # Linux/macOS
+chmod +x ./browserwing
 ./browserwing --port 8080
 
 # Windows (PowerShell)

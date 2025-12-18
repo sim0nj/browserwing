@@ -26,8 +26,11 @@
 - 前往 [Releases](https://github.com/browserwing/browserwing/releases) 下载对应操作系统的预构建二进制。
 - 运行后打开 `http://localhost:8080`。
 
+如果你下载遇到问题，可以访问gitee下载：[gitee releases](https://gitee.com/browserwing/browserwing/releases)
+
 ```bash
 # Linux/macOS
+chmod +x ./browserwing
 ./browserwing --port 8080
 
 # Windows (PowerShell)
@@ -90,9 +93,9 @@ flowchart LR
 
 ## 社区
 
-Discord: [https://discord.gg/BkqcApRj](https://discord.gg/BkqcApRj)
-twitter: [https://x.com/chg80333](https://x.com/chg80333)
-加微信进群：mongorz（备注 browserwing）
+- Discord: [https://discord.gg/BkqcApRj](https://discord.gg/BkqcApRj)
+- twitter: [https://x.com/chg80333](https://x.com/chg80333)
+- 加微信进交流群：mongorz（备注 browserwing）
 
 ## 致谢
 
