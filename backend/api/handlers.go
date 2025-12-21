@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -296,12 +297,16 @@ func (h *Handler) ClearInPageRecordingState(c *gin.Context) {
 // SaveScript 保存脚本
 func (h *Handler) SaveScript(c *gin.Context) {
 	var req struct {
-		ID          string                `json:"id"` // 可选，更新时使用
-		Name        string                `json:"name" binding:"required"`
-		Description string                `json:"description"`
-		URL         string                `json:"url" binding:"required"`
-		Actions     []models.ScriptAction `json:"actions" binding:"required"`
-		Tags        []string              `json:"tags"`
+		ID                    string                 `json:"id"` // 可选，更新时使用
+		Name                  string                 `json:"name" binding:"required"`
+		Description           string                 `json:"description"`
+		URL                   string                 `json:"url" binding:"required"`
+		Actions               []models.ScriptAction  `json:"actions" binding:"required"`
+		Tags                  []string               `json:"tags"`
+		IsMCPCommand          *bool                  `json:"is_mcp_command"`
+		MCPCommandName        string                 `json:"mcp_command_name"`
+		MCPCommandDescription string                 `json:"mcp_command_description"`
+		MCPInputSchema        map[string]interface{} `json:"mcp_input_schema"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -332,10 +337,27 @@ func (h *Handler) SaveScript(c *gin.Context) {
 		UpdatedAt:   time.Now(),
 	}
 
+	// 如果提供了 MCP 相关字段，则设置
+	if req.IsMCPCommand != nil {
+		script.IsMCPCommand = *req.IsMCPCommand
+	}
+	if req.MCPCommandName != "" {
+		script.MCPCommandName = req.MCPCommandName
+	}
+	if req.MCPCommandDescription != "" {
+		script.MCPCommandDescription = req.MCPCommandDescription
+	}
+	if req.MCPInputSchema != nil {
+		script.MCPInputSchema = req.MCPInputSchema
+	}
+
 	if err := h.db.SaveScript(script); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error.saveScriptFailed"})
 		return
 	}
+
+	// 同步 MCP 注册状态
+	h.syncMCPRegistration(c, script)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success.scriptSaved",
@@ -442,11 +464,15 @@ func (h *Handler) UpdateScript(c *gin.Context) {
 	}
 
 	var req struct {
-		Name        string                `json:"name"`
-		Description string                `json:"description"`
-		URL         string                `json:"url"`
-		Actions     []models.ScriptAction `json:"actions"`
-		Tags        []string              `json:"tags"`
+		Name                  string                 `json:"name"`
+		Description           string                 `json:"description"`
+		URL                   string                 `json:"url"`
+		Actions               []models.ScriptAction  `json:"actions"`
+		Tags                  []string               `json:"tags"`
+		IsMCPCommand          *bool                  `json:"is_mcp_command"`
+		MCPCommandName        *string                `json:"mcp_command_name"`
+		MCPCommandDescription *string                `json:"mcp_command_description"`
+		MCPInputSchema        map[string]interface{} `json:"mcp_input_schema"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -475,10 +501,27 @@ func (h *Handler) UpdateScript(c *gin.Context) {
 		script.Tags = req.Tags
 	}
 
+	// 如果提供了 MCP 相关字段，则更新（使用指针类型来区分未提供和提供了false）
+	if req.IsMCPCommand != nil {
+		script.IsMCPCommand = *req.IsMCPCommand
+	}
+	if req.MCPCommandName != nil {
+		script.MCPCommandName = *req.MCPCommandName
+	}
+	if req.MCPCommandDescription != nil {
+		script.MCPCommandDescription = *req.MCPCommandDescription
+	}
+	if req.MCPInputSchema != nil {
+		script.MCPInputSchema = req.MCPInputSchema
+	}
+
 	if err := h.db.UpdateScript(script); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error.updateScriptFailed"})
 		return
 	}
+
+	// 同步 MCP 注册状态
+	h.syncMCPRegistration(c, script)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success.scriptUpdated",
@@ -903,24 +946,8 @@ func (h *Handler) ToggleScriptMCPCommand(c *gin.Context) {
 		return
 	}
 
-	// 如果 MCP 服务器已启动，动态注册/取消注册
-	if h.mcpServer != nil {
-		// 使用类型断言访问 MCP 服务器方法
-		type MCPServerInterface interface {
-			RegisterScript(*models.Script) error
-			UnregisterScript(string)
-		}
-
-		if mcpSrv, ok := h.mcpServer.(MCPServerInterface); ok {
-			if req.IsMCPCommand {
-				if err := mcpSrv.RegisterScript(script); err != nil {
-					logger.Error(c.Request.Context(), "Failed to register MCP command: %v", err)
-				}
-			} else {
-				mcpSrv.UnregisterScript(scriptID)
-			}
-		}
-	}
+	// 同步 MCP 注册状态
+	h.syncMCPRegistration(c, script)
 
 	messageKey := "success.mcpCommandDisabled"
 	if req.IsMCPCommand {
@@ -1487,6 +1514,30 @@ func replacePlaceholders(text string, params map[string]string) string {
 
 	// 注意：这里不移除未替换的占位符，保留它们以便调试
 	return result
+}
+
+// syncMCPRegistration 同步 MCP 命令注册状态
+// 如果脚本是 MCP 命令则注册，否则取消注册
+func (h *Handler) syncMCPRegistration(ctx context.Context, script *models.Script) {
+	if h.mcpServer == nil {
+		return
+	}
+
+	// 使用类型断言访问 MCP 服务器方法
+	type MCPServerInterface interface {
+		RegisterScript(*models.Script) error
+		UnregisterScript(string)
+	}
+
+	if mcpSrv, ok := h.mcpServer.(MCPServerInterface); ok {
+		if script.IsMCPCommand {
+			if err := mcpSrv.RegisterScript(script); err != nil {
+				logger.Error(ctx, "Failed to register MCP command: %v", err)
+			}
+		} else {
+			mcpSrv.UnregisterScript(script.ID)
+		}
+	}
 }
 
 // ============= 工具管理相关 API =============

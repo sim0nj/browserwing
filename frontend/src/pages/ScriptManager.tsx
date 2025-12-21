@@ -631,13 +631,29 @@ export default function ScriptManager() {
       for (const script of data.scripts) {
         try {
           if (overwrite && script.id && existingIds.has(script.id)) {
-            // 覆盖现有脚本
-            await api.updateScript(script.id, {
+            // 覆盖现有脚本 - 只更新导入数据中存在的字段
+            const updateData: any = {
               name: script.name,
               description: script.description || '',
               url: script.url,
               actions: script.actions,
-            })
+            }
+            
+            // 如果导入数据包含MCP信息，则更新MCP信息
+            if (script.is_mcp_command !== undefined) {
+              updateData.is_mcp_command = script.is_mcp_command
+            }
+            if (script.mcp_command_name !== undefined) {
+              updateData.mcp_command_name = script.mcp_command_name
+            }
+            if (script.mcp_command_description !== undefined) {
+              updateData.mcp_command_description = script.mcp_command_description
+            }
+            if (script.mcp_input_schema !== undefined) {
+              updateData.mcp_input_schema = script.mcp_input_schema
+            }
+            
+            await api.updateScript(script.id, updateData)
             successCount++
           } else {
             // 创建新脚本
@@ -650,7 +666,7 @@ export default function ScriptManager() {
               ? ''
               : script.id
 
-            await api.createScript({
+            const createData: any = {
               id: scriptID,
               name: scriptName,
               description: script.description || '',
@@ -659,7 +675,23 @@ export default function ScriptManager() {
               tags: script.tags || [],
               can_publish: script.can_publish || false,
               can_fetch: script.can_fetch || false,
-            })
+            }
+            
+            // 如果导入数据包含MCP信息，则设置MCP信息
+            if (script.is_mcp_command !== undefined) {
+              createData.is_mcp_command = script.is_mcp_command
+            }
+            if (script.mcp_command_name !== undefined) {
+              createData.mcp_command_name = script.mcp_command_name
+            }
+            if (script.mcp_command_description !== undefined) {
+              createData.mcp_command_description = script.mcp_command_description
+            }
+            if (script.mcp_input_schema !== undefined) {
+              createData.mcp_input_schema = script.mcp_input_schema
+            }
+            
+            await api.createScript(createData)
             successCount++
           }
         } catch (err) {
