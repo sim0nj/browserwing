@@ -1997,6 +1997,26 @@ if (window.__browserwingRecorder__) {
 					}
 				}
 			}
+			// 检测 Backspace 键
+			else if (e.key === 'Backspace' || e.keyCode === 8) {
+				keyAction = {
+					type: 'keyboard',
+					timestamp: Date.now(),
+					key: 'backspace',
+					description: '{{KEYBOARD_BACKSPACE}}',
+					tagName: target.tagName ? target.tagName.toLowerCase() : ''
+				};
+				
+				// 如果在输入框或contenteditable中，记录选择器
+				if (target.tagName) {
+					var tagName = target.tagName.toLowerCase();
+					if (tagName === 'input' || tagName === 'textarea' || target.contentEditable === 'true') {
+						var selectors = getSelector(target);
+						keyAction.selector = selectors.css;
+						keyAction.xpath = selectors.xpath;
+					}
+				}
+			}
 			// 检测 Tab 键
 			else if (e.key === 'Tab' || e.keyCode === 9) {
 				keyAction = {

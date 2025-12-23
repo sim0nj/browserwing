@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ type Player struct {
 	recordingPage    *rod.Page                       // 录制的页面
 	recordingOutputs chan *proto.PageScreencastFrame // 录制帧通道
 	recordingDone    chan bool                       // 录制完成信号
+	pages            map[int]*rod.Page               // 多标签页支持 (key: tab index)
+	currentPage      *rod.Page                       // 当前活动页面
+	tabCounter       int                             // 标签页计数器
 }
 
 // highlightElement 高亮显示元素
@@ -92,6 +96,8 @@ func NewPlayer() *Player {
 		extractedData: make(map[string]interface{}),
 		successCount:  0,
 		failCount:     0,
+		pages:         make(map[int]*rod.Page),
+		tabCounter:    0,
 	}
 }
 
@@ -416,6 +422,12 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 	// 重置统计和抓取数据
 	p.ResetStats()
 
+	// 初始化多标签页支持
+	p.pages = make(map[int]*rod.Page)
+	p.tabCounter = 0
+	p.pages[p.tabCounter] = page
+	p.currentPage = page
+
 	// 导航到起始URL
 	if script.URL != "" {
 		logger.Info(ctx, "Navigate to: %s", script.URL)
@@ -460,33 +472,43 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 
 // executeAction 执行单个操作
 func (p *Player) executeAction(ctx context.Context, page *rod.Page, action models.ScriptAction) error {
+	// 对于跨标签页的操作,使用 currentPage
+	activePage := p.currentPage
+	if activePage == nil {
+		activePage = page
+	}
+
 	switch action.Type {
+	case "open_tab":
+		return p.executeOpenTab(ctx, page, action)
+	case "switch_tab":
+		return p.executeSwitchTab(ctx, action)
 	case "click":
-		return p.executeClick(ctx, page, action)
+		return p.executeClick(ctx, activePage, action)
 	case "input":
-		return p.executeInput(ctx, page, action)
+		return p.executeInput(ctx, activePage, action)
 	case "select":
-		return p.executeSelect(ctx, page, action)
+		return p.executeSelect(ctx, activePage, action)
 	case "navigate":
-		return p.executeNavigate(ctx, page, action)
+		return p.executeNavigate(ctx, activePage, action)
 	case "wait":
 		return p.executeWait(ctx, action)
 	case "sleep":
 		return p.executeSleep(ctx, action)
 	case "extract_text":
-		return p.executeExtractText(ctx, page, action)
+		return p.executeExtractText(ctx, activePage, action)
 	case "extract_html":
-		return p.executeExtractHTML(ctx, page, action)
+		return p.executeExtractHTML(ctx, activePage, action)
 	case "extract_attribute":
-		return p.executeExtractAttribute(ctx, page, action)
+		return p.executeExtractAttribute(ctx, activePage, action)
 	case "execute_js":
-		return p.executeJS(ctx, page, action)
+		return p.executeJS(ctx, activePage, action)
 	case "upload_file":
-		return p.executeUploadFile(ctx, page, action)
+		return p.executeUploadFile(ctx, activePage, action)
 	case "scroll":
-		return p.executeScroll(ctx, page, action)
+		return p.executeScroll(ctx, activePage, action)
 	case "keyboard":
-		return p.executeKeyboard(ctx, page, action)
+		return p.executeKeyboard(ctx, activePage, action)
 	default:
 		logger.Warn(ctx, "Unknown action type: %s", action.Type)
 		return nil
@@ -1422,64 +1444,293 @@ func (p *Player) executeKeyboard(ctx context.Context, page *rod.Page, action mod
 	case "ctrl+a":
 		// 全选操作：Ctrl+A (Windows/Linux) 或 Cmd+A (Mac)
 		logger.Info(ctx, "Executing select all (Ctrl+A)")
-		keyboard := page.Keyboard
-		// 按下 Ctrl 键
-		err = keyboard.Press(input.ControlLeft)
-		if err != nil {
-			return fmt.Errorf("failed to press Ctrl: %w", err)
-		}
-		// 按下 A 键
-		err = keyboard.Type(input.KeyA)
-		if err != nil {
-			keyboard.Release(input.ControlLeft) // 释放 Ctrl
-			return fmt.Errorf("failed to press A: %w", err)
-		}
-		// 释放 Ctrl 键
-		err = keyboard.Release(input.ControlLeft)
-		if err != nil {
-			return fmt.Errorf("failed to release Ctrl: %w", err)
+
+		// 根据操作系统选择不同的实现方式
+		if runtime.GOOS == "darwin" {
+			// Mac 使用 KeyActions API（更可靠）
+			logger.Info(ctx, "Using Command key for Mac with KeyActions")
+			err = page.KeyActions().Press(input.MetaLeft).Type(input.KeyA).Release(input.MetaLeft).Do()
+			if err != nil {
+				return fmt.Errorf("failed to execute Cmd+A: %w", err)
+			}
+		} else {
+			// Windows/Linux 使用原有方法
+			keyboard := page.Keyboard
+			err = keyboard.Press(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to press Ctrl: %w", err)
+			}
+			err = keyboard.Type(input.KeyA)
+			if err != nil {
+				keyboard.Release(input.ControlLeft)
+				return fmt.Errorf("failed to press A: %w", err)
+			}
+			err = keyboard.Release(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to release Ctrl: %w", err)
+			}
 		}
 
 	case "ctrl+c":
 		// 复制操作：Ctrl+C (Windows/Linux) 或 Cmd+C (Mac)
 		logger.Info(ctx, "Executing copy (Ctrl+C)")
-		keyboard := page.Keyboard
-		// 按下 Ctrl 键
-		err = keyboard.Press(input.ControlLeft)
-		if err != nil {
-			return fmt.Errorf("failed to press Ctrl: %w", err)
-		}
-		// 按下 C 键
-		err = keyboard.Type(input.KeyC)
-		if err != nil {
-			keyboard.Release(input.ControlLeft) // 释放 Ctrl
-			return fmt.Errorf("failed to press C: %w", err)
-		}
-		// 释放 Ctrl 键
-		err = keyboard.Release(input.ControlLeft)
-		if err != nil {
-			return fmt.Errorf("failed to release Ctrl: %w", err)
+
+		// 根据操作系统选择不同的实现方式
+		if runtime.GOOS == "darwin" {
+			// Mac 使用 KeyActions API（更可靠）
+			logger.Info(ctx, "Using Command key for Mac with KeyActions")
+			err = page.KeyActions().Press(input.MetaLeft).Type(input.KeyC).Release(input.MetaLeft).Do()
+			if err != nil {
+				return fmt.Errorf("failed to execute Cmd+C: %w", err)
+			}
+		} else {
+			// Windows/Linux 使用原有方法
+			keyboard := page.Keyboard
+			err = keyboard.Press(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to press Ctrl: %w", err)
+			}
+			err = keyboard.Type(input.KeyC)
+			if err != nil {
+				keyboard.Release(input.ControlLeft)
+				return fmt.Errorf("failed to press C: %w", err)
+			}
+			err = keyboard.Release(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to release Ctrl: %w", err)
+			}
 		}
 
 	case "ctrl+v":
 		// 粘贴操作：Ctrl+V (Windows/Linux) 或 Cmd+V (Mac)
 		logger.Info(ctx, "Executing paste (Ctrl+V)")
+
+		// 根据操作系统选择不同的实现方式
+		if runtime.GOOS == "darwin" {
+			// Mac 使用多种方法尝试
+			logger.Info(ctx, "Using Command key for Mac with KeyActions")
+
+			// 先确保元素已聚焦
+			if element != nil {
+				logger.Info(ctx, "Ensuring element is focused before paste")
+				if err := element.Focus(); err != nil {
+					logger.Warn(ctx, "Failed to focus element: %v", err)
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+
+			// 记录粘贴前的内容（如果有目标元素）
+			var beforeValue string
+			if element != nil {
+				valueResult, _ := element.Eval(`() => this.value || this.textContent || this.innerText || ''`)
+				if valueResult != nil {
+					beforeValue = valueResult.Value.String()
+					logger.Info(ctx, "Content before paste: length=%d", len(beforeValue))
+				}
+			}
+
+			// 方法1: 使用 KeyActions 多次尝试
+			pasteSuccess := false
+			for attempt := 0; attempt < 3; attempt++ {
+				if attempt > 0 {
+					logger.Info(ctx, "Retry paste attempt %d", attempt+1)
+					time.Sleep(300 * time.Millisecond)
+				}
+
+				keyboard := page.Keyboard
+				err = keyboard.Press(input.MetaLeft)
+				if err != nil {
+					return fmt.Errorf("failed to press Cmd: %w", err)
+				}
+				err = keyboard.Type(input.KeyV)
+				if err != nil {
+					keyboard.Release(input.MetaLeft)
+					return fmt.Errorf("failed to press V: %w", err)
+				}
+				err = keyboard.Release(input.MetaLeft)
+				if err != nil {
+					return fmt.Errorf("failed to release Cmd: %w", err)
+				}
+
+				if err == nil {
+					// 等待一下看粘贴是否生效
+					time.Sleep(500 * time.Millisecond)
+
+					// 检查内容是否发生变化
+					if element != nil {
+						valueResult, _ := element.Eval(`() => this.value || this.textContent || this.innerText || ''`)
+						if valueResult != nil {
+							afterValue := valueResult.Value.String()
+							// 内容发生变化才认为粘贴成功
+							if afterValue != beforeValue {
+								pasteSuccess = true
+								logger.Info(ctx, "✓ Paste successful via KeyActions, content changed (length: %d -> %d)", len(beforeValue), len(afterValue))
+								break
+							}
+						}
+					} else {
+						// 没有目标元素，假设成功
+						pasteSuccess = true
+						logger.Info(ctx, "✓ Paste completed via KeyActions (no target element to verify)")
+						break
+					}
+				}
+			}
+
+			if !pasteSuccess {
+				logger.Warn(ctx, "KeyActions paste did not change content, trying navigator.clipboard API")
+
+				// 方法2: 使用 navigator.clipboard API 读取剪贴板（支持富文本）
+				_, jsErr := page.Eval(`async () => {
+					try {
+						console.log('[BrowserWing] Attempting to read clipboard...');
+						
+						// 获取当前聚焦的元素
+						const activeElement = document.activeElement;
+						if (!activeElement) {
+							console.warn('[BrowserWing] No active element');
+							return false;
+						}
+						
+						// 尝试读取剪贴板数据（包括富文本）
+						let clipboardText = '';
+						let clipboardHTML = '';
+						
+						try {
+							// 首先尝试 clipboard.read() 来获取富文本
+							const clipboardItems = await navigator.clipboard.read();
+							console.log('[BrowserWing] Clipboard items:', clipboardItems.length);
+							
+							for (const item of clipboardItems) {
+								console.log('[BrowserWing] Clipboard item types:', item.types);
+								
+								// 优先读取 HTML 格式
+								if (item.types.includes('text/html')) {
+									const blob = await item.getType('text/html');
+									clipboardHTML = await blob.text();
+									console.log('[BrowserWing] Got HTML from clipboard, length:', clipboardHTML.length);
+								}
+								
+								// 读取纯文本作为后备
+								if (item.types.includes('text/plain')) {
+									const blob = await item.getType('text/plain');
+									clipboardText = await blob.text();
+									console.log('[BrowserWing] Got text from clipboard:', clipboardText.substring(0, 50));
+								}
+							}
+						} catch (readErr) {
+							console.warn('[BrowserWing] clipboard.read() failed, trying readText():', readErr);
+							// 回退到 readText()（只支持纯文本）
+							clipboardText = await navigator.clipboard.readText();
+							console.log('[BrowserWing] Got text via readText():', clipboardText.substring(0, 50));
+						}
+						
+						// 如果两者都没有，失败
+						if (!clipboardHTML && !clipboardText) {
+							console.error('[BrowserWing] No clipboard content available');
+							return false;
+						}
+						
+						// 根据元素类型粘贴
+						if (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') {
+							// 传统输入框：只能插入纯文本
+							const start = activeElement.selectionStart || 0;
+							const end = activeElement.selectionEnd || 0;
+							const currentValue = activeElement.value || '';
+							
+							// 在光标位置插入文本
+							activeElement.value = currentValue.substring(0, start) + clipboardText + currentValue.substring(end);
+							
+							// 设置新的光标位置
+							const newPos = start + clipboardText.length;
+							activeElement.setSelectionRange(newPos, newPos);
+							
+							// 触发事件
+							activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+							activeElement.dispatchEvent(new Event('change', { bubbles: true }));
+							
+							console.log('[BrowserWing] Pasted text to input/textarea');
+							return true;
+							
+						} else if (activeElement.isContentEditable) {
+							// contenteditable 元素：优先使用富文本
+							console.log('[BrowserWing] Pasting to contenteditable element');
+							
+							// 获取当前选区
+							const selection = window.getSelection();
+							if (!selection || selection.rangeCount === 0) {
+								console.warn('[BrowserWing] No selection range');
+								return false;
+							}
+							
+							const range = selection.getRangeAt(0);
+							range.deleteContents();
+							
+							if (clipboardHTML) {
+								// 插入 HTML 内容（保留格式）
+								console.log('[BrowserWing] Inserting HTML content');
+								const fragment = range.createContextualFragment(clipboardHTML);
+								range.insertNode(fragment);
+								
+								// 移动光标到插入内容之后
+								range.collapse(false);
+								selection.removeAllRanges();
+								selection.addRange(range);
+								
+							} else {
+								// 只有纯文本，使用 insertText
+								console.log('[BrowserWing] Inserting plain text');
+								document.execCommand('insertText', false, clipboardText);
+							}
+							
+							// 触发事件
+							activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+							activeElement.dispatchEvent(new Event('change', { bubbles: true }));
+							
+							console.log('[BrowserWing] Pasted to contenteditable successfully');
+							return true;
+						}
+						
+						console.warn('[BrowserWing] Element type not supported for paste:', activeElement.tagName);
+						return false;
+						
+					} catch (e) {
+						console.error('[BrowserWing] Clipboard API failed:', e);
+						return false;
+					}
+				}`)
+
+				if jsErr != nil {
+					return fmt.Errorf("all paste methods failed on Mac: %v", jsErr)
+				}
+				logger.Info(ctx, "✓ Paste successful using navigator.clipboard API")
+			}
+		} else {
+			// Windows/Linux 使用原有方法
+			keyboard := page.Keyboard
+			err = keyboard.Press(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to press Ctrl: %w", err)
+			}
+			err = keyboard.Type(input.KeyV)
+			if err != nil {
+				keyboard.Release(input.ControlLeft)
+				return fmt.Errorf("failed to press V: %w", err)
+			}
+			err = keyboard.Release(input.ControlLeft)
+			if err != nil {
+				return fmt.Errorf("failed to release Ctrl: %w", err)
+			}
+			logger.Info(ctx, "✓ Paste successful using Ctrl+V")
+		}
+
+	case "backspace":
+		// Backspace 键
+		logger.Info(ctx, "Executing Backspace key")
 		keyboard := page.Keyboard
-		// 按下 Ctrl 键
-		err = keyboard.Press(input.ControlLeft)
+		err = keyboard.Type(input.Backspace)
 		if err != nil {
-			return fmt.Errorf("failed to press Ctrl: %w", err)
-		}
-		// 按下 V 键
-		err = keyboard.Type(input.KeyV)
-		if err != nil {
-			keyboard.Release(input.ControlLeft) // 释放 Ctrl
-			return fmt.Errorf("failed to press V: %w", err)
-		}
-		// 释放 Ctrl 键
-		err = keyboard.Release(input.ControlLeft)
-		if err != nil {
-			return fmt.Errorf("failed to release Ctrl: %w", err)
+			return fmt.Errorf("failed to press Backspace: %w", err)
 		}
 
 	case "tab":
@@ -1508,5 +1759,79 @@ func (p *Player) executeKeyboard(ctx context.Context, page *rod.Page, action mod
 	time.Sleep(300 * time.Millisecond)
 
 	logger.Info(ctx, "✓ Keyboard action completed: %s", key)
+	return nil
+}
+
+// executeOpenTab 执行打开新标签页操作
+func (p *Player) executeOpenTab(ctx context.Context, page *rod.Page, action models.ScriptAction) error {
+	url := action.URL
+	if url == "" {
+		return fmt.Errorf("open_tab action requires URL")
+	}
+
+	logger.Info(ctx, "Opening new tab with URL: %s", url)
+
+	// 获取浏览器实例
+	browser := page.Browser()
+
+	// 创建新页面（新标签页）
+	newPage, err := browser.Page(proto.TargetCreateTarget{URL: url})
+	if err != nil {
+		return fmt.Errorf("failed to create new tab: %w", err)
+	}
+
+	// 等待新页面加载
+	if err := newPage.WaitLoad(); err != nil {
+		logger.Warn(ctx, "Failed to wait for new tab to load: %v", err)
+	}
+
+	// 将新页面添加到 pages map
+	p.tabCounter++
+	tabIndex := p.tabCounter
+	p.pages[tabIndex] = newPage
+
+	// 切换到新标签页
+	p.currentPage = newPage
+
+	logger.Info(ctx, "✓ New tab opened (tab index: %d): %s", tabIndex, url)
+
+	// 等待页面稳定
+	time.Sleep(1 * time.Second)
+
+	return nil
+}
+
+// executeSwitchTab 执行切换标签页操作
+func (p *Player) executeSwitchTab(ctx context.Context, action models.ScriptAction) error {
+	// 可以通过 action.Value 传递标签页索引
+	// 例如 "0" 表示第一个标签页，"1" 表示第二个标签页
+	tabIndexStr := action.Value
+	if tabIndexStr == "" {
+		return fmt.Errorf("switch_tab action requires tab index in value field")
+	}
+
+	var tabIndex int
+	_, err := fmt.Sscanf(tabIndexStr, "%d", &tabIndex)
+	if err != nil {
+		return fmt.Errorf("invalid tab index: %s", tabIndexStr)
+	}
+
+	targetPage, exists := p.pages[tabIndex]
+	if !exists {
+		return fmt.Errorf("tab index %d does not exist", tabIndex)
+	}
+
+	logger.Info(ctx, "Switching to tab index: %d", tabIndex)
+	p.currentPage = targetPage
+
+	// 激活目标页面
+	_, err = targetPage.Activate()
+	if err != nil {
+		logger.Warn(ctx, "Failed to activate tab: %v", err)
+	}
+
+	logger.Info(ctx, "✓ Switched to tab %d", tabIndex)
+	time.Sleep(500 * time.Millisecond)
+
 	return nil
 }

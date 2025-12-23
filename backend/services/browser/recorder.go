@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +33,8 @@ type Recorder struct {
 	startTime       time.Time
 	startURL        string
 	actions         []models.ScriptAction
-	page            *rod.Page
+	page            *rod.Page            // 主页面
+	pages           map[string]*rod.Page // 所有录制的标签页 (key: page target ID)
 	syncTicker      *time.Ticker
 	syncStopChan    chan bool
 	lastSyncedCount int
@@ -44,6 +47,7 @@ type Recorder struct {
 func NewRecorder() *Recorder {
 	return &Recorder{
 		actions:       make([]models.ScriptAction, 0),
+		pages:         make(map[string]*rod.Page),
 		apiServerPort: "8080", // 默认端口
 	}
 }
@@ -82,6 +86,35 @@ func (r *Recorder) StartRecording(ctx context.Context, page *rod.Page, url strin
 	r.startURL = url
 	r.actions = make([]models.ScriptAction, 0)
 	r.page = page
+	r.pages = make(map[string]*rod.Page)
+
+	// 添加主页面到 pages map
+	pageInfo := page.MustInfo()
+	r.pages[string(pageInfo.TargetID)] = page
+
+	// 记录所有现有的页面（但不注入脚本），避免 watchForNewPages 把它们当作新页面
+	browser := page.Browser()
+	existingPages, existingPagesErr := browser.Pages()
+	if existingPagesErr == nil {
+		for _, existingPage := range existingPages {
+			if existingPage == nil {
+				continue
+			}
+			existingPageInfo, err := existingPage.Info()
+			if err != nil {
+				continue
+			}
+			existingTargetID := string(existingPageInfo.TargetID)
+			// 只记录有效的页面，避免包含特殊页面
+			if isValidRecordingURL(existingPageInfo.URL) {
+				// 如果不是主页面，添加到 map 但不注入脚本
+				if existingTargetID != string(pageInfo.TargetID) {
+					r.pages[existingTargetID] = existingPage
+					logger.Info(ctx, "Marked existing tab as known (will not record): %s, URL: %s", existingTargetID, existingPageInfo.URL)
+				}
+			}
+		}
+	}
 
 	logger.Info(ctx, "Preparing to inject recording script into page (language: %s)...", language)
 
@@ -160,6 +193,9 @@ func (r *Recorder) StartRecording(ctx context.Context, page *rod.Page, url strin
 	// 监听页面导航事件,在新页面自动重新注入录制脚本
 	go r.watchForPageNavigation(ctx, page)
 
+	// 监听新标签页的创建
+	go r.watchForNewPages(ctx, page)
+
 	logger.Info(ctx, "Starting recording operation, URL: %s", url)
 
 	// 启动定期同步协程，每500ms同步一次浏览器中的操作（更频繁，减少丢失风险）
@@ -183,27 +219,91 @@ func (r *Recorder) syncActionsFromBrowser(ctx context.Context) {
 				return
 			}
 
-			// 检查是否有 AI 提取请求
-			r.checkAndProcessAIRequest(ctx)
-
-			// 从浏览器获取当前录制的所有操作（优先从 sessionStorage 读取，因为它能跨页面保存）
-			result, err := r.page.Eval(`() => {
-				try {
-					// 先尝试从 sessionStorage 获取（跨页面持久化）
-					var saved = sessionStorage.getItem('__browserwing_actions__');
-					if (saved) {
-						return JSON.parse(saved);
+			// 检查是否有停止录制请求（从任何页面）
+			hasStopRequest := false
+			for _, pg := range r.pages {
+				if pg != nil {
+					stopResult, _ := pg.Eval(`() => {
+						if (window.__stopRecordingRequest__) {
+							return true;
+						}
+						return false;
+					}`)
+					if stopResult != nil && stopResult.Value.Bool() {
+						hasStopRequest = true
+						logger.Info(ctx, "[syncActionsFromBrowser] Detected stop request from a tab page")
+						break
 					}
-				} catch (e) {
-					console.error('[BrowserWing] sessionStorage read error:', e);
 				}
-				// 回退到内存中的数据
-				return window.__recordedActions__ || [];
-			}`)
-			if err == nil && result != nil {
-				var actions []models.ScriptAction
-				jsonData, _ := json.Marshal(result.Value)
-				if json.Unmarshal(jsonData, &actions) == nil {
+			}
+
+			// 如果检测到停止请求,通知主页面
+			if hasStopRequest {
+				// 在主页面设置停止标志,让 manager 的监听循环能检测到
+				if r.page != nil {
+					_, _ = r.page.Eval(`() => {
+						window.__stopRecordingRequest__ = true;
+					}`)
+					logger.Info(ctx, "[syncActionsFromBrowser] Forwarded stop request to main page")
+				}
+			}
+
+			// 检查是否有 AI 提取请求（从所有页面）
+			for _, pg := range r.pages {
+				if pg != nil {
+					r.checkAndProcessAIRequestOnPage(ctx, pg)
+				}
+			}
+
+			// 从所有页面同步录制操作
+			allActions := make([]models.ScriptAction, 0)
+			for _, pg := range r.pages {
+				if pg == nil {
+					continue
+				}
+
+				// 从浏览器获取当前录制的所有操作（优先从 sessionStorage 读取，因为它能跨页面保存）
+				result, err := pg.Eval(`() => {
+					try {
+						// 先尝试从 sessionStorage 获取（跨页面持久化）
+						var saved = sessionStorage.getItem('__browserwing_actions__');
+						if (saved) {
+							return JSON.parse(saved);
+						}
+					} catch (e) {
+						console.error('[BrowserWing] sessionStorage read error:', e);
+					}
+					// 回退到内存中的数据
+					return window.__recordedActions__ || [];
+				}`)
+				if err == nil && result != nil {
+					var actions []models.ScriptAction
+					jsonData, _ := json.Marshal(result.Value)
+					if json.Unmarshal(jsonData, &actions) == nil {
+						allActions = append(allActions, actions...)
+					}
+				}
+			}
+
+			// 合并并按时间戳排序
+			if len(allActions) > 0 {
+				// 去重和排序
+				uniqueActions := make(map[int64]models.ScriptAction)
+				for _, action := range allActions {
+					uniqueActions[action.Timestamp] = action
+				}
+
+				actions := make([]models.ScriptAction, 0, len(uniqueActions))
+				for _, action := range uniqueActions {
+					actions = append(actions, action)
+				}
+
+				// 按时间戳排序
+				sort.Slice(actions, func(i, j int) bool {
+					return actions[i].Timestamp < actions[j].Timestamp
+				})
+
+				if len(actions) > r.lastSyncedCount {
 					// 只保存新增的操作
 					if len(actions) > r.lastSyncedCount {
 						newActions := actions[r.lastSyncedCount:]
@@ -223,14 +323,14 @@ func (r *Recorder) syncActionsFromBrowser(ctx context.Context) {
 	}
 }
 
-// checkAndProcessAIRequest 检查并处理 AI 提取请求
-func (r *Recorder) checkAndProcessAIRequest(ctx context.Context) {
-	if r.llmManager == nil {
+// checkAndProcessAIRequestOnPage 检查并处理 AI 提取请求（在指定页面）
+func (r *Recorder) checkAndProcessAIRequestOnPage(ctx context.Context, page *rod.Page) {
+	if r.llmManager == nil || page == nil {
 		return
 	}
 
 	// 检查是否有待处理的 AI 请求
-	result, err := r.page.Eval(`() => {
+	result, err := page.Eval(`() => {
 		if (window.__aiExtractionRequest__) {
 			var req = window.__aiExtractionRequest__;
 			delete window.__aiExtractionRequest__; // 立即清除请求，避免重复处理
@@ -268,7 +368,7 @@ func (r *Recorder) checkAndProcessAIRequest(ctx context.Context) {
 	// 处理表单填充请求
 	if requestType == "formfill" {
 		logger.Info(ctx, "Received AI form fill request, HTML length: %d", len(html))
-		r.handleFormFillRequest(ctx, html, description)
+		r.handleFormFillRequest(ctx, page, html, description)
 		return
 	}
 
@@ -296,7 +396,7 @@ func (r *Recorder) checkAndProcessAIRequest(ctx context.Context) {
 	if err != nil {
 		logger.Error(ctx, "AI code generation failed: %v", err)
 		// 将错误返回给页面
-		_, _ = r.page.Eval(fmt.Sprintf(`() => {
+		_, _ = page.Eval(fmt.Sprintf(`() => {
 			window.__aiExtractionResponse__ = {
 				success: false,
 				error: %q
@@ -312,7 +412,7 @@ func (r *Recorder) checkAndProcessAIRequest(ctx context.Context) {
 	// 转义 JavaScript 代码中的特殊字符
 	jsCode = escapeJSString(jsCode)
 
-	_, _ = r.page.Eval(fmt.Sprintf(`() => {
+	_, _ = page.Eval(fmt.Sprintf(`() => {
 		window.__aiExtractionResponse__ = {
 			success: true,
 			javascript: %q,
@@ -329,13 +429,13 @@ func escapeJSString(s string) string {
 	return s
 }
 
-// handleFormFillRequest 处理表单填充请求
-func (r *Recorder) handleFormFillRequest(ctx context.Context, html, description string) {
+// handleFormFillRequest 处理表单填充请求（在指定页面）
+func (r *Recorder) handleFormFillRequest(ctx context.Context, page *rod.Page, html, description string) {
 	// 获取默认 LLM 提取器
 	extractor, err := r.llmManager.GetDefault()
 	if err != nil {
 		logger.Error(ctx, "Failed to get default LLM: %v", err)
-		_, _ = r.page.Eval(fmt.Sprintf(`() => {
+		_, _ = page.Eval(fmt.Sprintf(`() => {
 			window.__aiFormFillResponse__ = {
 				success: false,
 				error: %q
@@ -351,7 +451,7 @@ func (r *Recorder) handleFormFillRequest(ctx context.Context, html, description 
 	})
 	if err != nil {
 		logger.Error(ctx, "AI form fill code generation failed: %v", err)
-		_, _ = r.page.Eval(fmt.Sprintf(`() => {
+		_, _ = page.Eval(fmt.Sprintf(`() => {
 			window.__aiFormFillResponse__ = {
 				success: false,
 				error: %q
@@ -366,7 +466,7 @@ func (r *Recorder) handleFormFillRequest(ctx context.Context, html, description 
 	jsCode := fillResult.JavaScript
 	jsCode = escapeJSString(jsCode)
 
-	_, _ = r.page.Eval(fmt.Sprintf(`() => {
+	_, _ = page.Eval(fmt.Sprintf(`() => {
 		window.__aiFormFillResponse__ = {
 			success: true,
 			javascript: %q,
@@ -392,12 +492,26 @@ func (r *Recorder) StopRecording(ctx context.Context) ([]models.ScriptAction, er
 		close(r.syncStopChan)
 	}
 
-	// 最后一次同步：从页面获取录制的操作
-	if r.page != nil {
-		logger.Info(ctx, "Performing final sync...")
+	// 最后一次同步：从所有页面获取录制的操作
+	logger.Info(ctx, "Performing final sync from all pages...")
+	allActions := make([]models.ScriptAction, 0)
+
+	for targetID, pg := range r.pages {
+		if pg == nil {
+			continue
+		}
+
+		// 检查页面URL是否有效
+		pageInfo, err := pg.Info()
+		if err != nil || !isValidRecordingURL(pageInfo.URL) {
+			logger.Info(ctx, "Skipping invalid/special page: %s", targetID)
+			continue
+		}
+
+		logger.Info(ctx, "Syncing from page: %s", targetID)
 
 		// 先检查录制器是否还存在
-		checkResult, _ := r.page.Eval(`() => {
+		checkResult, _ := pg.Eval(`() => {
 			var savedCount = 0;
 			try {
 				var saved = sessionStorage.getItem('__browserwing_actions__');
@@ -414,10 +528,10 @@ func (r *Recorder) StopRecording(ctx context.Context) ([]models.ScriptAction, er
 			}
 		}`)
 		if checkResult != nil {
-			logger.Info(ctx, "Recorder status check: %+v", checkResult.Value)
+			logger.Info(ctx, "Recorder status check on page %s: %+v", targetID, checkResult.Value)
 		}
 
-		result, err := r.page.Eval(`() => {
+		result, err := pg.Eval(`() => {
 			try {
 				// 优先从 sessionStorage 获取完整数据
 				var saved = sessionStorage.getItem('__browserwing_actions__');
@@ -430,14 +544,14 @@ func (r *Recorder) StopRecording(ctx context.Context) ([]models.ScriptAction, er
 			return window.__recordedActions__ || [];
 		}`)
 		if err != nil {
-			logger.Warn(ctx, "Failed to get recording actions: %v", err)
+			logger.Warn(ctx, "Failed to get recording actions from page %s: %v", targetID, err)
 		} else {
-			logger.Info(ctx, "Result type received: %T", result.Value)
+			logger.Info(ctx, "Result type received from page %s: %T", targetID, result.Value)
 			// 解析 JSON 数据
 			var actions []models.ScriptAction
 			jsonData, err := json.Marshal(result.Value)
 			if err == nil {
-				logger.Info(ctx, "JSON serialization successful, data length: %d", len(jsonData))
+				logger.Info(ctx, "JSON serialization successful from page %s, data length: %d", targetID, len(jsonData))
 				if err := json.Unmarshal(jsonData, &actions); err == nil {
 					// 合并最后的操作（可能有新的）
 					if len(actions) > r.lastSyncedCount {
@@ -455,7 +569,10 @@ func (r *Recorder) StopRecording(ctx context.Context) ([]models.ScriptAction, er
 		}
 
 		// 清理注入的脚本、UI面板和 sessionStorage
-		_, _ = r.page.Eval(`() => { 
+		// 使用超时避免卡住
+		cleanupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+
+		_, _ = pg.Context(cleanupCtx).Eval(`() => { 
 			// 移除录制器 UI 面板
 			if (window.__recorderUI__ && window.__recorderUI__.panel) {
 				try {
@@ -484,16 +601,40 @@ func (r *Recorder) StopRecording(ctx context.Context) ([]models.ScriptAction, er
 			try { sessionStorage.removeItem('__browserwing_actions__'); } catch(e) {}
 		}`)
 
-		// 恢复 CSP 限制
-		_ = proto.PageSetBypassCSP{Enabled: false}.Call(r.page)
-		logger.Info(ctx, "✓ CSP restrictions restored")
-	} else {
-		logger.Warn(ctx, "Page object is nil")
+		cancel() // 立即释放资源
+
+		// 恢复 CSP 限制（忽略错误）
+		_ = proto.PageSetBypassCSP{Enabled: false}.Call(pg)
 	}
+
+	logger.Info(ctx, "✓ All pages cleaned up")
+
+	// 合并所有操作：去重并按时间戳排序
+	if len(allActions) > 0 {
+		uniqueActions := make(map[int64]models.ScriptAction)
+		for _, action := range allActions {
+			uniqueActions[action.Timestamp] = action
+		}
+
+		r.actions = make([]models.ScriptAction, 0, len(uniqueActions))
+		for _, action := range uniqueActions {
+			r.actions = append(r.actions, action)
+		}
+
+		// 按时间戳排序
+		sort.Slice(r.actions, func(i, j int) bool {
+			return r.actions[i].Timestamp < r.actions[j].Timestamp
+		})
+
+		logger.Info(ctx, "✓ Merged and sorted %d unique actions from all pages", len(r.actions))
+	}
+
+	logger.Info(ctx, "✓ CSP restrictions restored")
 
 	r.isRecording = false
 	actions := r.actions
 	r.page = nil
+	r.pages = make(map[string]*rod.Page)
 
 	logger.Info(ctx, "Final return of %d actions", len(actions))
 
@@ -734,4 +875,141 @@ func (r *Recorder) GetStartURL() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.startURL
+}
+
+// watchForNewPages 监听新标签页的创建并自动注入录制脚本
+func (r *Recorder) watchForNewPages(ctx context.Context, mainPage *rod.Page) {
+	// 获取浏览器实例
+	browser := mainPage.Browser()
+
+	// 使用定时轮询检测新标签页（每秒检查一次）
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// 检查录制是否还在进行
+			if !r.IsRecording() {
+				return
+			}
+
+			r.mu.Lock()
+
+			// 获取当前所有页面
+			pages, err := browser.Pages()
+			if err != nil {
+				r.mu.Unlock()
+				continue
+			}
+
+			// 检查是否有新页面
+			for _, page := range pages {
+				pageInfo, err := page.Info()
+				if err != nil {
+					continue
+				}
+
+				targetID := string(pageInfo.TargetID)
+
+				// 过滤掉特殊页面：devtools、chrome内部页面、about页面等
+				if !isValidRecordingURL(pageInfo.URL) {
+					continue
+				}
+
+				// 如果这是一个新页面（不在我们的 map 中）
+				if _, exists := r.pages[targetID]; !exists {
+					logger.Info(ctx, "Detected new tab/page: %s, URL: %s", targetID, pageInfo.URL)
+
+					// 将新页面添加到 map
+					r.pages[targetID] = page
+
+					// 在新页面注入录制脚本
+					go r.injectRecordingScriptToPage(ctx, page, targetID)
+
+					// 记录打开新标签页的操作
+					action := models.ScriptAction{
+						Type:      "open_tab",
+						Timestamp: time.Now().UnixMilli(),
+						URL:       pageInfo.URL,
+						Text:      fmt.Sprintf("Open new tab: %s", pageInfo.URL),
+					}
+					r.actions = append(r.actions, action)
+					logger.Info(ctx, "Recorded 'open_tab' action for new page: %s", pageInfo.URL)
+				}
+			}
+
+			r.mu.Unlock()
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// injectRecordingScriptToPage 向指定页面注入录制脚本和UI面板
+func (r *Recorder) injectRecordingScriptToPage(ctx context.Context, page *rod.Page, targetID string) {
+	// 等待页面加载
+	if err := page.WaitLoad(); err != nil {
+		logger.Warn(ctx, "Failed to wait for new page to load: %v", err)
+	}
+
+	// 等待一下让页面稳定
+	time.Sleep(500 * time.Millisecond)
+
+	// 禁用 CSP
+	err := proto.PageSetBypassCSP{Enabled: true}.Call(page)
+	if err != nil {
+		logger.Warn(ctx, "Failed to disable CSP on new page %s: %v", targetID, err)
+	} else {
+		logger.Info(ctx, "✓ CSP restrictions disabled on new page %s", targetID)
+	}
+
+	// 设置录制模式标志
+	_, err = page.Eval(`() => { window.__browserwingRecordingMode__ = true; }`)
+	if err != nil {
+		logger.Warn(ctx, "Failed to set recording mode flag on new page %s: %v", targetID, err)
+	}
+
+	// 替换录制脚本中的多语言占位符
+	localizedRecorderScript := ReplaceI18nPlaceholders(recorderScript, r.language, RecorderI18n)
+
+	// 注入录制脚本
+	_, err = page.Eval(`() => { ` + localizedRecorderScript + ` return true; }`)
+	if err != nil {
+		logger.Error(ctx, "Failed to inject recording script to new page %s: %v", targetID, err)
+		return
+	}
+
+	logger.Info(ctx, "✓ Recording script injected to new page %s successfully", targetID)
+
+	// 注入 iframe 消息监听器
+	_, err = page.Eval(`() => { ` + iframeMessageListenerScript + ` return true; }`)
+	if err != nil {
+		logger.Warn(ctx, "Failed to inject iframe message listener to new page %s: %v", targetID, err)
+	} else {
+		logger.Info(ctx, "✓ iframe message listener injected to new page %s", targetID)
+	}
+
+	// 为新页面中的 iframe 注入录制脚本
+	r.injectIframeRecorders(ctx, page)
+
+	// 监听新页面的导航事件
+	go r.watchForPageNavigation(ctx, page)
+}
+
+// isValidRecordingURL 检查URL是否是有效的录制目标
+// 过滤掉特殊页面如 devtools、chrome内部页面、about页面等
+func isValidRecordingURL(url string) bool {
+	// 空URL
+	if url == "" {
+		return false
+	}
+
+	// 只录制 http/https 页面
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return false
+	}
+
+	return true
 }

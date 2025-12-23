@@ -537,6 +537,16 @@ export default function ScriptManager() {
       newAction.description = t('script.action.keyboardDefault')
     }
 
+    // 为打开新标签页类型设置默认值
+    if (type === 'open_tab') {
+      newAction.url = 'https://'
+    }
+
+    // 为切换标签页类型设置默认值
+    if (type === 'switch_tab') {
+      newAction.value = '0'
+    }
+
     setEditingActions([...editingActions, newAction])
   }
 
@@ -1588,6 +1598,13 @@ export default function ScriptManager() {
                                       title={t('script.editor.addKeyboard')}
                                     >
                                       + Keyboard
+                                    </button>
+                                    <button
+                                      onClick={() => handleAddAction('open_tab')}
+                                      className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 rounded transition-colors"
+                                      title="添加打开新标签页步骤"
+                                    >
+                                      + 新标签页
                                     </button>
                                   </div>
                                 )}
@@ -2780,6 +2797,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   >
                     <option value="enter">Enter (回车键)</option>
                     <option value="tab">Tab (切换)</option>
+                    <option value="backspace">Backspace (删除)</option>
                     <option value="ctrl+a">Ctrl+A (全选)</option>
                     <option value="ctrl+c">Ctrl+C (复制)</option>
                     <option value="ctrl+v">Ctrl+V (粘贴)</option>
@@ -2808,6 +2826,33 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   />
                 </div>
               </>
+            )}
+            {action.type === 'open_tab' && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">URL</label>
+                <input
+                  type="text"
+                  value={action.url || ''}
+                  onChange={(e) => onUpdate(index, 'url', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="https://example.com"
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">在新标签页中打开此 URL</p>
+              </div>
+            )}
+            {action.type === 'switch_tab' && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">标签页索引</label>
+                <input
+                  type="number"
+                  value={action.value || '0'}
+                  onChange={(e) => onUpdate(index, 'value', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                  min="0"
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">0 表示第一个标签页，1 表示第二个标签页，以此类推</p>
+              </div>
             )}
           </div>
         </div>
@@ -2973,6 +3018,18 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
               </div>
             )}
           </>
+        )}
+        {action.type === 'open_tab' && action.url && (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">URL:</span>{' '}
+            <span className="text-gray-800 dark:text-gray-200">{action.url}</span>
+          </div>
+        )}
+        {action.type === 'switch_tab' && action.value && (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">标签页索引:</span>{' '}
+            <span className="text-gray-800 dark:text-gray-200">{action.value}</span>
+          </div>
         )}
       </div>
     </div>
