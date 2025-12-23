@@ -276,6 +276,20 @@ func (m *Manager) Start(ctx context.Context) error {
 		logger.Info(ctx, "Download behavior set: %s, path: %s", downloadBehavior.Behavior, downloadBehavior.DownloadPath)
 	}
 
+	// 授予剪贴板权限，避免粘贴时弹出权限请求
+	grantPermissions := &proto.BrowserGrantPermissions{
+		Permissions: []proto.BrowserPermissionType{
+			proto.BrowserPermissionTypeClipboardReadWrite,
+			proto.BrowserPermissionTypeClipboardSanitizedWrite,
+		},
+	}
+	err = grantPermissions.Call(browser)
+	if err != nil {
+		logger.Warn(ctx, "Failed to grant clipboard permissions: %v", err)
+	} else {
+		logger.Info(ctx, "✓ Clipboard permissions granted (read/write)")
+	}
+
 	m.launcher = l
 	m.browser = browser
 	m.isRunning = true
@@ -504,6 +518,23 @@ func (m *Manager) OpenPage(url string, language string) error {
 		return fmt.Errorf("failed to wait for page load: %w", err)
 	}
 
+	// 为当前页面授予剪贴板权限
+	pageInfo, _ := page.Info()
+	if pageInfo != nil {
+		grantPagePermissions := &proto.BrowserGrantPermissions{
+			Origin: pageInfo.URL,
+			Permissions: []proto.BrowserPermissionType{
+				proto.BrowserPermissionTypeClipboardReadWrite,
+				proto.BrowserPermissionTypeClipboardSanitizedWrite,
+			},
+		}
+		if err := grantPagePermissions.Call(m.browser); err != nil {
+			logger.Warn(ctx, "Failed to grant clipboard permissions for page: %v", err)
+		} else {
+			logger.Info(ctx, "✓ Clipboard permissions granted for page: %s", pageInfo.URL)
+		}
+	}
+
 	// 注入浮动录制按钮
 	time.Sleep(500 * time.Millisecond) // 等待页面稳定
 	// 替换浮动按钮脚本中的多语言占位符
@@ -718,6 +749,22 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 	page = page.MustSetUserAgent(&proto.NetworkSetUserAgentOverride{
 		UserAgent: userAgent,
 	})
+
+	// 为回放页面授予剪贴板权限
+	if scriptURL != "" {
+		grantPlayPermissions := &proto.BrowserGrantPermissions{
+			Origin: scriptURL,
+			Permissions: []proto.BrowserPermissionType{
+				proto.BrowserPermissionTypeClipboardReadWrite,
+				proto.BrowserPermissionTypeClipboardSanitizedWrite,
+			},
+		}
+		if err := grantPlayPermissions.Call(m.browser); err != nil {
+			logger.Warn(ctx, "Failed to grant clipboard permissions for playback: %v", err)
+		} else {
+			logger.Info(ctx, "✓ Clipboard permissions granted for playback")
+		}
+	}
 
 	// 检查是否需要录制视频
 	recordingConfig := m.db.GetDefaultRecordingConfig()

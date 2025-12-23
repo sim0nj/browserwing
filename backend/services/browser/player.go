@@ -1592,6 +1592,8 @@ func (p *Player) executeKeyboard(ctx context.Context, page *rod.Page, action mod
 							return false;
 						}
 						
+						console.log('[BrowserWing] Active element type:', activeElement.tagName, activeElement.contentEditable);
+						
 						// 尝试读取剪贴板数据（包括富文本）
 						let clipboardText = '';
 						let clipboardHTML = '';
@@ -1634,6 +1636,9 @@ func (p *Player) executeKeyboard(ctx context.Context, page *rod.Page, action mod
 						// 根据元素类型粘贴
 						if (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') {
 							// 传统输入框：只能插入纯文本
+							// 注意：TEXTAREA 永远不支持富文本，只能用纯文本
+							console.log('[BrowserWing] Detected INPUT/TEXTAREA, using plain text only');
+							
 							const start = activeElement.selectionStart || 0;
 							const end = activeElement.selectionEnd || 0;
 							const currentValue = activeElement.value || '';
@@ -1649,46 +1654,92 @@ func (p *Player) executeKeyboard(ctx context.Context, page *rod.Page, action mod
 							activeElement.dispatchEvent(new Event('input', { bubbles: true }));
 							activeElement.dispatchEvent(new Event('change', { bubbles: true }));
 							
-							console.log('[BrowserWing] Pasted text to input/textarea');
+							console.log('[BrowserWing] Pasted plain text to input/textarea');
 							return true;
 							
-						} else if (activeElement.isContentEditable) {
-							// contenteditable 元素：优先使用富文本
-							console.log('[BrowserWing] Pasting to contenteditable element');
+						} else if (activeElement.isContentEditable || activeElement.contentEditable === 'true') {
+							// contenteditable 元素：支持富文本
+							console.log('[BrowserWing] Detected contenteditable element, attempting rich text paste');
+							
+							// 对于 React 编辑器，尽量使用浏览器原生粘贴事件
+							// 而不是直接操作 DOM，避免破坏 React 状态
+							
+							// 方法1：尝试触发原生 paste 事件（最佳，不破坏框架状态）
+							try {
+								const pasteEvent = new ClipboardEvent('paste', {
+									bubbles: true,
+									cancelable: true,
+									clipboardData: new DataTransfer()
+								});
+								
+								// 设置剪贴板数据
+								if (clipboardHTML) {
+									pasteEvent.clipboardData.setData('text/html', clipboardHTML);
+								}
+								pasteEvent.clipboardData.setData('text/plain', clipboardText);
+								
+								// 触发 paste 事件，让编辑器自己处理
+								const handled = activeElement.dispatchEvent(pasteEvent);
+								
+								if (handled) {
+									console.log('[BrowserWing] Paste event dispatched successfully');
+									return true;
+								}
+							} catch (eventErr) {
+								console.warn('[BrowserWing] Failed to dispatch paste event:', eventErr);
+							}
+							
+							// 方法2：手动插入 HTML（可能破坏 React 状态，但是备选方案）
+							console.log('[BrowserWing] Fallback to manual HTML insertion');
 							
 							// 获取当前选区
 							const selection = window.getSelection();
 							if (!selection || selection.rangeCount === 0) {
 								console.warn('[BrowserWing] No selection range');
-								return false;
+								// 尝试聚焦元素并创建选区
+								activeElement.focus();
+								if (selection && selection.rangeCount > 0) {
+									console.log('[BrowserWing] Created selection after focus');
+								} else {
+									// 最后尝试：直接设置 innerHTML
+									if (clipboardHTML) {
+										activeElement.innerHTML = clipboardHTML;
+									} else {
+										activeElement.textContent = clipboardText;
+									}
+									activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+									return true;
+								}
 							}
 							
-							const range = selection.getRangeAt(0);
-							range.deleteContents();
-							
-							if (clipboardHTML) {
-								// 插入 HTML 内容（保留格式）
-								console.log('[BrowserWing] Inserting HTML content');
-								const fragment = range.createContextualFragment(clipboardHTML);
-								range.insertNode(fragment);
+							if (selection && selection.rangeCount > 0) {
+								const range = selection.getRangeAt(0);
+								range.deleteContents();
 								
-								// 移动光标到插入内容之后
-								range.collapse(false);
-								selection.removeAllRanges();
-								selection.addRange(range);
+								if (clipboardHTML) {
+									// 插入 HTML 内容（保留格式）
+									console.log('[BrowserWing] Inserting HTML content via range');
+									const fragment = range.createContextualFragment(clipboardHTML);
+									range.insertNode(fragment);
+									
+									// 移动光标到插入内容之后
+									range.collapse(false);
+									selection.removeAllRanges();
+									selection.addRange(range);
+									
+								} else {
+									// 只有纯文本，使用 insertText
+									console.log('[BrowserWing] Inserting plain text via execCommand');
+									document.execCommand('insertText', false, clipboardText);
+								}
 								
-							} else {
-								// 只有纯文本，使用 insertText
-								console.log('[BrowserWing] Inserting plain text');
-								document.execCommand('insertText', false, clipboardText);
+								// 触发事件
+								activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+								activeElement.dispatchEvent(new Event('change', { bubbles: true }));
+								
+								console.log('[BrowserWing] Pasted to contenteditable successfully');
+								return true;
 							}
-							
-							// 触发事件
-							activeElement.dispatchEvent(new Event('input', { bubbles: true }));
-							activeElement.dispatchEvent(new Event('change', { bubbles: true }));
-							
-							console.log('[BrowserWing] Pasted to contenteditable successfully');
-							return true;
 						}
 						
 						console.warn('[BrowserWing] Element type not supported for paste:', activeElement.tagName);
