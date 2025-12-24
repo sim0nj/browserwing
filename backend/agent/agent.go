@@ -932,7 +932,7 @@ func (am *AgentManager) GetLazyMCPConfigs() ([]agent.LazyMCPConfig, error) {
 				continue
 			}
 			config.URL = service.URL
-		} 
+		}
 		// 从数据库加载该服务的工具配置
 		tools, err := am.db.GetMCPServiceTools(service.ID)
 		if err != nil {
