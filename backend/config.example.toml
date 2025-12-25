@@ -33,3 +33,7 @@ assets_dir = "./assets"
 [log]
 level = "info"  # 日志级别: debug, info, warn, error
 file = "./logs/browserwing.log"
+max_size = 100  # 单个日志文件最大大小(MB),默认100MB
+max_backups = 3  # 保留的旧日志文件最大数量,默认3个
+max_age = 7  # 保留旧日志文件的最大天数,默认7天
+compress = false  # 是否压缩旧日志,默认false

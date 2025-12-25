@@ -21,12 +21,15 @@ func SetupRouter(handler *Handler, agentHandler interface{}, frontendFS fs.FS, e
 		r.Use(gin.Recovery())
 	}
 
+	// TraceID 中间件 - 必须在其他中间件之前
+	r.Use(TraceIDMiddleware())
+
 	// CORS配置 - 允许所有来源（因为录制时可能访问任何网站）
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Trace-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Trace-ID"},
 		AllowCredentials: false, // AllowAllOrigins 为 true 时必须设置为 false
 	}))
 

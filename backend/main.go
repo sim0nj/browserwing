@@ -21,6 +21,7 @@ import (
 	"github.com/browserwing/browserwing/pkg/logger"
 	"github.com/browserwing/browserwing/services/browser"
 	"github.com/browserwing/browserwing/storage"
+	"github.com/rs/zerolog"
 )
 
 // 构建信息变量，通过Makefile的LDFLAGS注入
@@ -53,6 +54,10 @@ func main() {
 	}
 
 	logger.InitLogger(cfg.Log)
+
+	// 禁用 agent-sdk-go 内部 zerolog 的 Debug 和 Info 日志
+	// 只允许 Warn 及以上级别的日志输出
+	zerolog.SetGlobalLevel(zerolog.WarnLevel)
 
 	// 优先级: 命令行参数 > 环境变量 > 配置文件
 	if *port != "" {

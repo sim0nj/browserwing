@@ -116,7 +116,11 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Log == nil {
 		cfg.Log = &logger.LoggerConfig{
-			Level: "info",
+			Level:      "info",
+			MaxSize:    100,
+			MaxBackups: 3,
+			MaxAge:     7,
+			Compress:   false,
 		}
 	}
 
