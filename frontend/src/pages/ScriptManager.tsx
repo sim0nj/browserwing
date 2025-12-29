@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api, { Script, ScriptAction, RecordingConfig, ScriptExecution } from '../api/client'
 import { RefreshCw, Play, Trash2, Clock, FileCode, ChevronDown, ChevronUp, Edit2, X, Check, ExternalLink, GripVertical, Download, Upload, CheckSquare, Square, Copy, Tag, Folder, HelpCircle, Clipboard, Plus } from 'lucide-react'
 import Toast from '../components/Toast'
@@ -93,6 +93,14 @@ export default function ScriptManager() {
   const [showImportConfirm, setShowImportConfirm] = useState(false)
   const [importData, setImportData] = useState<any>(null)
   const [duplicateScriptIds, setDuplicateScriptIds] = useState<string[]>([])
+  
+  // 导入方式相关
+  const [showImportMenu, setShowImportMenu] = useState(false)
+  const [showJSONImportDialog, setShowJSONImportDialog] = useState(false)
+  const [jsonInput, setJsonInput] = useState('')
+  const [jsonInputError, setJsonInputError] = useState('')
+  const importMenuRef = useRef<HTMLDivElement>(null)
+  const importButtonRef = useRef<HTMLButtonElement>(null)
 
   // 添加操作下拉菜单状态
   const [showAddActionMenu, setShowAddActionMenu] = useState(false)
@@ -118,6 +126,24 @@ export default function ScriptManager() {
       loadExecutions()
     }
   }, [activeTab, currentPage, filterGroup, filterTag, searchQuery, successFilter])
+
+  // 点击外部区域关闭导入下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showImportMenu && 
+          importMenuRef.current && 
+          importButtonRef.current && 
+          !importMenuRef.current.contains(event.target as Node) && 
+          !importButtonRef.current.contains(event.target as Node)) {
+        setShowImportMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showImportMenu])
 
   const loadRecordingConfig = async () => {
     try {
@@ -670,6 +696,46 @@ export default function ScriptManager() {
     input.click()
   }
 
+  const handleJSONImport = async () => {
+    if (!jsonInput.trim()) {
+      setJsonInputError(t('script.import.jsonCodeEmpty'))
+      return
+    }
+
+    try {
+      const data = JSON.parse(jsonInput)
+
+      if (!data.scripts || !Array.isArray(data.scripts)) {
+        setJsonInputError(t('script.messages.invalidFormat'))
+        return
+      }
+
+      // 检查是否有重复的ID
+      const existingIds = new Set(scripts.map(s => s.id))
+      const duplicateIds = data.scripts
+        .filter((script: any) => script.id && existingIds.has(script.id))
+        .map((script: any) => script.name)
+
+      // 关闭对话框
+      setShowJSONImportDialog(false)
+      setJsonInput('')
+      setJsonInputError('')
+
+      if (duplicateIds.length > 0) {
+        // 有重复ID，显示确认对话框
+        setImportData(data)
+        setDuplicateScriptIds(duplicateIds)
+        setShowImportConfirm(true)
+      } else {
+        // 没有重复ID，直接导入
+        await performImport(data, false)
+      }
+    } catch (err) {
+      console.error('解析JSON代码失败:', err)
+      setJsonInputError(t('script.import.jsonCodeInvalid'))
+    }
+  }
+
   const performImport = async (data: any, overwrite: boolean) => {
     try {
       setLoading(true)
@@ -1011,14 +1077,45 @@ export default function ScriptManager() {
                 </svg>
                 <span>{t('script.recordingConfig.title')}</span>
               </button>
-              <button
-                onClick={handleImportScripts}
-                className="btn-secondary flex items-center space-x-2"
-                disabled={loading}
-              >
-                <Upload className="w-5 h-5" />
-                <span>{t('script.import')}</span>
-              </button>
+              {/* 导入方式下拉菜单 */}
+              <div className="relative">
+                <button
+                  ref={importButtonRef}
+                  onClick={() => setShowImportMenu(!showImportMenu)}
+                  className="btn-secondary flex items-center space-x-2"
+                  disabled={loading}
+                >
+                  <Upload className="w-5 h-5" />
+                  <span>{t('script.import')}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showImportMenu ? 'rotate-180' : ''}`} />
+                </button>
+                {showImportMenu && (
+                  <div ref={importMenuRef} className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowImportMenu(false)
+                          handleImportScripts()
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        {t('script.import.file')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowImportMenu(false)
+                          setJsonInput('')
+                          setJsonInputError('')
+                          setShowJSONImportDialog(true)
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        {t('script.import.jsonCode')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={loadScripts}
                 className="btn-secondary flex items-center space-x-2"
@@ -2113,6 +2210,65 @@ export default function ScriptManager() {
         </div>
       )}
 
+      {/* JSON Code Import Dialog */}
+      {showJSONImportDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ marginTop: 0, marginBottom: 0 }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('script.import.jsonCode')}</h3>
+                <button onClick={() => {
+                  setShowJSONImportDialog(false)
+                  setJsonInput('')
+                  setJsonInputError('')
+                }} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    {t('script.import.jsonCodeDescription')}
+                  </p>
+                  <div className="space-y-2">
+                    <textarea
+                      value={jsonInput}
+                      onChange={(e) => {
+                        setJsonInput(e.target.value)
+                        setJsonInputError('')
+                      }}
+                      placeholder={t('script.import.jsonCodePlaceholder')}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 font-mono text-sm h-64 resize-vertical ${jsonInputError ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`}
+                    />
+                    {jsonInputError && (
+                      <p className="text-sm text-red-600 dark:text-red-400">{jsonInputError}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      setShowJSONImportDialog(false)
+                      setJsonInput('')
+                      setJsonInputError('')
+                    }}
+                    className="btn-secondary"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={handleJSONImport}
+                    className="btn-primary"
+                  >
+                    {t('common.import')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 批量设置分组对话框 */}
       {showBatchGroupDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ marginTop: 0, marginBottom: 0 }}>
@@ -3127,7 +3283,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
           <button
             onClick={() => onCopyToClipboard(index)}
             className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
-            title="复制到剪贴板（可粘贴到其他脚本）"
+            title={t('script.action.copyToClipboard')}
           >
             <Clipboard className="w-5 h-5" />
           </button>
@@ -3135,7 +3291,7 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             onClick={() => onPaste(index)}
             disabled={!hasCopiedAction}
             className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
-            title="粘贴到此处（从其他脚本复制）"
+            title={t('script.action.pasteFromClipboard')}
           >
             <Plus className="w-5 h-5" />
           </button>
