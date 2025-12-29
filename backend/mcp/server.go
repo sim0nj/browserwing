@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -148,15 +149,16 @@ func (s *MCPServer) registerAllTools() error {
 
 // registerTool 注册单个脚本为工具
 func (s *MCPServer) registerTool(script *models.Script) error {
-	// 构建工具定义
-	tool := mcpgo.NewTool(
-		script.MCPCommandName,
+	opts := []mcpgo.ToolOption{
 		mcpgo.WithDescription(script.MCPCommandDescription),
-		mcpgo.WithString("url", mcpgo.Description("URL to navigate (optional, overrides script URL)")),
-	)
+	}
 
 	// 如果脚本有 InputSchema，添加参数
 	if script.MCPInputSchema != nil {
+
+		debugSchema, _ := json.Marshal(script.MCPInputSchema)
+		logger.Info(s.ctx, "MCP input schema: %s", string(debugSchema))
+
 		if props, ok := script.MCPInputSchema["properties"].(map[string]interface{}); ok {
 			for propName, propDef := range props {
 				if propDefMap, ok := propDef.(map[string]interface{}); ok {
@@ -173,23 +175,11 @@ func (s *MCPServer) registerTool(script *models.Script) error {
 					// 根据类型添加参数
 					switch propType {
 					case "string":
-						tool = mcpgo.NewTool(
-							script.MCPCommandName,
-							mcpgo.WithDescription(script.MCPCommandDescription),
-							mcpgo.WithString(propName, mcpgo.Description(desc)),
-						)
+						opts = append(opts, mcpgo.WithString(propName, mcpgo.Description(desc)))
 					case "number", "integer":
-						tool = mcpgo.NewTool(
-							script.MCPCommandName,
-							mcpgo.WithDescription(script.MCPCommandDescription),
-							mcpgo.WithNumber(propName, mcpgo.Description(desc)),
-						)
+						opts = append(opts, mcpgo.WithNumber(propName, mcpgo.Description(desc)))
 					case "boolean":
-						tool = mcpgo.NewTool(
-							script.MCPCommandName,
-							mcpgo.WithDescription(script.MCPCommandDescription),
-							mcpgo.WithBoolean(propName, mcpgo.Description(desc)),
-						)
+						opts = append(opts, mcpgo.WithBoolean(propName, mcpgo.Description(desc)))
 					}
 				}
 			}
@@ -198,6 +188,8 @@ func (s *MCPServer) registerTool(script *models.Script) error {
 
 	// 创建工具处理器
 	handler := s.createToolHandler(script)
+
+	tool := mcpgo.NewTool(script.MCPCommandName, opts...)
 
 	// 注册工具
 	s.mcpServer.AddTool(tool, handler)
