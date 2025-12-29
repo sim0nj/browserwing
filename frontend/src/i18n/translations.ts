@@ -231,6 +231,8 @@ export const translations = {
     'script.messages.batchDeleteError': '批量删除失败',
     'script.messages.recordingConfigUpdated': '录制配置已更新',
     'script.messages.recordingConfigError': '更新录制配置失败',
+    'script.messages.actionCopiedToClipboard': '操作已复制到剪贴板',
+    'script.messages.actionPasted': '操作已粘贴',
     'script.messages.invalidFormat': '无效的脚本文件格式',
 
     'click': '点击',

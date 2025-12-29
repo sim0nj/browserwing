@@ -69,6 +69,7 @@ export default function ScriptManager() {
   // Tutorial modal
   const [showTutorial, setShowTutorial] = useState(false)
   const [copiedItem, setCopiedItem] = useState<string | null>(null)
+  const [copiedAction, setCopiedAction] = useState<ScriptAction | null>(null)
 
   // 录制配置相关
   const [showRecordingConfig, setShowRecordingConfig] = useState(false)
@@ -483,6 +484,21 @@ export default function ScriptManager() {
     newActions.splice(index + 1, 0, duplicatedAction)
     setEditingActions(newActions)
     showMessage(t('script.messages.stepsCopied'), 'success')
+  }
+
+  const handleCopyActionToClipboard = (index: number) => {
+    const actionToCopy = editingActions[index]
+    setCopiedAction({ ...actionToCopy, timestamp: Date.now() })
+    showMessage(t('script.messages.actionCopiedToClipboard'), 'success')
+  }
+
+  const handlePasteAction = (index: number) => {
+    if (!copiedAction) return
+    const pastedAction = { ...copiedAction, timestamp: Date.now() }
+    const newActions = [...editingActions]
+    newActions.splice(index + 1, 0, pastedAction)
+    setEditingActions(newActions)
+    showMessage(t('script.messages.actionPasted'), 'success')
   }
 
   const handleUpdateActionValue = (index: number, field: keyof ScriptAction, value: string | number | string[]) => {
@@ -1729,14 +1745,17 @@ export default function ScriptManager() {
                                     <div className="space-y-2">
                                       {editingActions.map((action, index) => (
                                         <SortableActionItem
-                                          key={index}
-                                          id={index.toString()}
-                                          action={action}
-                                          index={index}
-                                          onUpdate={handleUpdateActionValue}
-                                          onDelete={handleDeleteAction}
-                                          onDuplicate={handleDuplicateAction}
-                                        />
+                                        key={index}
+                                        id={index.toString()}
+                                        action={action}
+                                        index={index}
+                                        onUpdate={handleUpdateActionValue}
+                                        onDelete={handleDeleteAction}
+                                        onDuplicate={handleDuplicateAction}
+                                        onCopyToClipboard={handleCopyActionToClipboard}
+                                        onPaste={handlePasteAction}
+                                        hasCopiedAction={!!copiedAction}
+                                      />
                                       ))}
                                     </div>
                                   </SortableContext>
@@ -2666,9 +2685,12 @@ interface SortableActionItemProps {
   onUpdate: (index: number, field: keyof ScriptAction, value: string | number | string[]) => void
   onDelete: (index: number) => void
   onDuplicate: (index: number) => void
+  onCopyToClipboard: (index: number) => void
+  onPaste: (index: number) => void
+  hasCopiedAction: boolean
 }
 
-function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate }: SortableActionItemProps) {
+function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate, onCopyToClipboard, onPaste, hasCopiedAction }: SortableActionItemProps) {
   const { t } = useLanguage()
   const [isSemanticExpanded, setIsSemanticExpanded] = useState(false)
   const {
@@ -3101,6 +3123,21 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             title={t('script.action.duplicateStep')}
           >
             <Copy className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onCopyToClipboard(index)}
+            className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+            title="复制到剪贴板（可粘贴到其他脚本）"
+          >
+            <Clipboard className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onPaste(index)}
+            disabled={!hasCopiedAction}
+            className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+            title="粘贴到此处（从其他脚本复制）"
+          >
+            <Plus className="w-5 h-5" />
           </button>
           <button
             onClick={() => onDelete(index)}
