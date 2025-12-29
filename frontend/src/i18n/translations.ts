@@ -411,6 +411,8 @@ export const translations = {
     'script.editor.saving': '保存中...',
     'script.action.filePathHint': '回放时使用的文件绝对路径',
     'script.action.inputPlaceholder': '输入内容或选择值',
+    'script.action.remark': '备注:',
+    'script.action.remarkPlaceholder': '输入操作备注',
     'script.action.deleteStep': '删除此步骤',
     'script.action.semanticInfo': '语义信息',
     'script.action.readOnly': '录制时自动采集',
@@ -1286,6 +1288,8 @@ export const translations = {
     'script.editor.saving': '儲存中...',
     'script.action.filePathHint': '播放時使用的檔案絕對路徑',
     'script.action.inputPlaceholder': '輸入內容或選擇值',
+    'script.action.remark': '備註:',
+    'script.action.remarkPlaceholder': '輸入操作備註',
     'script.action.deleteStep': '刪除此步驟',
     'script.recordingConfig.title': '錄製設定',
     'script.recordingConfig.enabled': '啟用錄製',
@@ -2109,6 +2113,8 @@ export const translations = {
     'script.editor.saving': 'Saving...',
     'script.action.filePathHint': 'Absolute file path to use during playback',
     'script.action.inputPlaceholder': 'Enter content or select value',
+    'script.action.remark': 'Remark:',
+    'script.action.remarkPlaceholder': 'Enter action remark',
     'script.action.deleteStep': 'Delete this step',
 
     // Script Execution History
@@ -2985,6 +2991,8 @@ export const translations = {
     'script.editor.saving': 'Guardando...',
     'script.action.filePathHint': 'Ruta absoluta del archivo a usar durante reproducción',
     'script.action.inputPlaceholder': 'Ingrese contenido o seleccione valor',
+    'script.action.remark': 'Nota:',
+    'script.action.remarkPlaceholder': 'Ingrese una nota para la acción',
     'script.action.deleteStep': 'Eliminar este paso',
 
     // Historial de Ejecución de Scripts
@@ -3828,6 +3836,8 @@ export const translations = {
     'script.editor.saving': '保存中...',
     'script.action.filePathHint': '再生時に使用するファイルの絶対パス',
     'script.action.inputPlaceholder': '内容を入力または値を選択',
+    'script.action.remark': '備考:',
+    'script.action.remarkPlaceholder': 'アクションの備考を入力',
     'script.action.deleteStep': 'このステップを削除',
 
     // スクリプト実行履歴

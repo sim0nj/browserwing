@@ -11,7 +11,7 @@ export default function Dashboard() {
         <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
           {t('dashboard.hero.title')}
         </h1>
-        <p className="text-lg lg:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+        <p className="text-lg lg:text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
           {t('dashboard.hero.subtitle')}
         </p>
         <div className="flex items-center justify-center gap-4 pt-4">

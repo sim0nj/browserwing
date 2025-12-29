@@ -208,6 +208,7 @@ export interface ScriptAction {
   description?: string
   multiple?: boolean
   accept?: string
+  remark?: string
   // 滚动相关字段
   scroll_x?: number
   scroll_y?: number

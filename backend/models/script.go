@@ -13,6 +13,7 @@ type DownloadedFile struct {
 	Size         int64     `json:"size"`          // 文件大小（字节）
 	DownloadTime time.Time `json:"download_time"` // 下载时间
 }
+
 // ScriptAction 脚本操作步骤（v2 - 支持语义与自愈，向后兼容）
 type ScriptAction struct {
 	// =========================
@@ -47,6 +48,7 @@ type ScriptAction struct {
 	Description string   `json:"description,omitempty"` // 人类可读描述
 	Multiple    bool     `json:"multiple,omitempty"`
 	Accept      string   `json:"accept,omitempty"`
+	Remark      string   `json:"remark,omitempty"` // 操作备注
 
 	// 滚动相关字段
 	ScrollX int `json:"scroll_x,omitempty"`
@@ -87,8 +89,8 @@ type ActionContext struct {
 }
 
 type ActionEvidence struct {
-	BackendDOMNodeID int64  `json:"backend_dom_node_id,omitempty"`
-	AXNodeID         string `json:"ax_node_id,omitempty"`
+	BackendDOMNodeID int64   `json:"backend_dom_node_id,omitempty"`
+	AXNodeID         string  `json:"ax_node_id,omitempty"`
 	Confidence       float64 `json:"confidence,omitempty"` // 录制时匹配置信度
 }
 
