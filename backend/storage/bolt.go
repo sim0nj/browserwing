@@ -583,6 +583,27 @@ func (b *BoltDB) GetScriptExecution(id string) (*models.ScriptExecution, error) 
 	return &execution, nil
 }
 
+func (b *BoltDB) GetLatestScriptExecutionByScriptID(scriptID string) (*models.ScriptExecution, error) {
+	var execution models.ScriptExecution
+	err := b.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(scriptExecutionsBucket)
+		return bucket.ForEach(func(k, v []byte) error {
+			var execution models.ScriptExecution
+			if err := json.Unmarshal(v, &execution); err != nil {
+				return err
+			}
+			if execution.ScriptID == scriptID {
+				return json.Unmarshal(v, &execution)
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &execution, nil
+}
+
 // ListScriptExecutions 列出所有脚本执行记录（支持按脚本ID过滤）
 func (b *BoltDB) ListScriptExecutions(scriptID string) ([]*models.ScriptExecution, error) {
 	var executions []*models.ScriptExecution

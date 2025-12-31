@@ -36,7 +36,6 @@ type Manager struct {
 	isRunning              bool
 	startTime              time.Time
 	recorder               *Recorder
-	player                 *Player
 	activePage             *rod.Page               // 当前活动页面
 	defaultBrowserConfig   *models.BrowserConfig   // 默认浏览器配置
 	siteConfigs            []*models.BrowserConfig // 网站特定配置列表
@@ -66,7 +65,6 @@ func NewManager(cfg *config.Config, db *storage.BoltDB, llmManager *llm.Manager)
 		db:         db,
 		llmManager: llmManager,
 		recorder:   recorder,
-		player:     NewPlayer(),
 	}
 }
 
@@ -711,8 +709,6 @@ func (m *Manager) ClearInPageRecordingState() {
 
 // PlayScript 回放脚本
 func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*models.PlayResult, *rod.Page, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if !m.isRunning || m.browser == nil {
 		return nil, nil, fmt.Errorf("browser is not running")
@@ -783,6 +779,8 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 		}
 	}
 
+	player := NewPlayer()
+
 	// 检查是否需要录制视频
 	recordingConfig := m.db.GetDefaultRecordingConfig()
 	var videoPath string
@@ -811,7 +809,7 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 			}
 
 			logger.Info(ctx, "Starting video recording: %s (frame rate: %d, quality: %d)", videoPath, frameRate, quality)
-			if err := m.player.StartVideoRecording(page, videoPath, frameRate, quality); err != nil {
+			if err := player.StartVideoRecording(page, videoPath, frameRate, quality); err != nil {
 				logger.Warn(ctx, "Failed to start video recording: %v", err)
 				videoPath = "" // 清空路径，表示录制失败
 			}
@@ -819,12 +817,12 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 	}
 
 	// 执行回放
-	playErr := m.player.PlayScript(ctx, page, script)
+	playErr := player.PlayScript(ctx, page, script)
 
 	// 停止视频录制
 	if videoPath != "" {
 		logger.Info(ctx, "Stopping video recording")
-		if err := m.player.StopVideoRecording(videoPath, recordingConfig.FrameRate); err != nil {
+		if err := player.StopVideoRecording(videoPath, recordingConfig.FrameRate); err != nil {
 			logger.Warn(ctx, "Failed to stop video recording: %v", err)
 		} else {
 			execution.VideoPath = videoPath
@@ -837,9 +835,9 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 	execution.Duration = execution.EndTime.Sub(execution.StartTime).Milliseconds()
 
 	// 记录统计信息
-	execution.SuccessSteps = m.player.GetSuccessCount()
-	execution.FailedSteps = m.player.GetFailCount()
-	execution.ExtractedData = m.player.GetExtractedData()
+	execution.SuccessSteps = player.GetSuccessCount()
+	execution.FailedSteps = player.GetFailCount()
+	execution.ExtractedData = player.GetExtractedData()
 
 	// 判断是否成功
 	if playErr != nil {
@@ -873,15 +871,8 @@ func (m *Manager) PlayScript(ctx context.Context, script *models.Script) (*model
 	return &models.PlayResult{
 		Success:       true,
 		Message:       "Script replay completed",
-		ExtractedData: m.player.GetExtractedData(),
+		ExtractedData: player.GetExtractedData(),
 	}, page, nil
-}
-
-// GetPlayerExtractedData 获取上次回放抓取的数据
-func (m *Manager) GetPlayerExtractedData() map[string]interface{} {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.player.GetExtractedData()
 }
 
 // checkInPageRecordingRequests 检查页面内的录制控制请求

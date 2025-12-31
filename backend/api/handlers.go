@@ -680,7 +680,19 @@ func (h *Handler) GetPlayResult(c *gin.Context) {
 		return
 	}
 
-	extractedData := h.browserManager.GetPlayerExtractedData()
+	scriptID := c.Query("script_id")
+	if scriptID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error.scriptIDRequired"})
+		return
+	}
+
+	execution, err := h.db.GetLatestScriptExecutionByScriptID(scriptID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error.executionNotFound"})
+		return
+	}
+
+	extractedData := execution.ExtractedData
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": extractedData,
