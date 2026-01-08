@@ -1877,6 +1877,15 @@ export default function ScriptManager() {
                                               >
                                                 {t('script.action.switchTab')}
                                               </button>
+                                              <button
+                                                onClick={() => {
+                                                  handleAddAction('switch_active_tab')
+                                                  setShowAddActionMenu(false)
+                                                }}
+                                                className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                              >
+                                                {t('script.action.switchActiveTab')}
+                                              </button>
                                             </div>
                                           </div>
                                         </div>
@@ -2944,7 +2953,15 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
             <span className="font-semibold text-base text-gray-900 dark:text-gray-100">{t(action.type)}</span>
           </div>
           <div className="space-y-3">
-            {action.type !== 'sleep' && action.type !== 'wait' && action.type !== 'execute_js' && action.type !== 'upload_file' && action.type !== 'scroll' && action.type !== 'keyboard' && (
+            {action.type !== 'sleep' && 
+              action.type !== 'wait' && 
+              action.type !== 'execute_js' && 
+              action.type !== 'upload_file' && 
+              action.type !== 'scroll' && 
+              action.type !== 'keyboard' &&
+              action.type !== 'switch_tab' &&
+              action.type !== 'open_tab' &&
+              action.type !== 'switch_active_tab' && (
               <>
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.selector')}</label>
@@ -3191,12 +3208,12 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg font-mono bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="https://example.com"
                 />
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">在新标签页中打开此 URL</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('script.action.openTabHint')}</p>
               </div>
             )}
             {action.type === 'switch_tab' && (
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">标签页索引</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.switchTabIndex')}</label>
                 <input
                   type="number"
                   value={action.value || '0'}
@@ -3205,7 +3222,12 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
                   placeholder="0"
                   min="0"
                 />
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">0 表示第一个标签页，1 表示第二个标签页，以此类推</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('script.action.switchTabIndexHint')}</p>
+              </div>
+            )}
+            {action.type === 'switch_active_tab' && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.switchActiveTab')}</label>
               </div>
             )}
           </div>
@@ -3523,11 +3545,15 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
         )}
         {action.type === 'switch_tab' && action.value && (
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-medium">标签页索引:</span>{' '}
+            <span className="font-medium">{t('script.action.switchTabIndex')}:</span>{' '}
             <span className="text-gray-800 dark:text-gray-200">{action.value}</span>
           </div>
         )}
-
+        {action.type === 'switch_active_tab' && (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="font-medium">{t('script.action.switchActiveTab')}</span>
+          </div>
+        )}
         {/* 语义信息展示 */}
         {(action.intent || action.accessibility || action.context || action.evidence) && (
           <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">

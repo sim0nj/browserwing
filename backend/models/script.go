@@ -19,7 +19,7 @@ type ScriptAction struct {
 	// =========================
 	// 原有字段（保持不变）
 	// =========================
-	Type      string            `json:"type"`      // click, input, select, navigate, wait, sleep, extract_text, extract_attribute, extract_html, execute_js, upload_file, scroll, keyboard, open_tab, switch_tab
+	Type      string            `json:"type"`      // click, input, select, navigate, wait, sleep, extract_text, extract_attribute, extract_html, execute_js, upload_file, scroll, keyboard, open_tab, switch_tab, switch_active_tab
 	Timestamp int64             `json:"timestamp"` // 时间戳（毫秒）
 	Selector  string            `json:"selector"`  // CSS选择器
 	XPath     string            `json:"xpath"`     // XPath选择器（更可靠）
@@ -120,7 +120,6 @@ type Script struct {
 }
 
 func (s *Script) Copy() *Script {
-
 	actions := make([]ScriptAction, len(s.Actions))
 	copy(actions, s.Actions)
 

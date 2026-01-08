@@ -481,6 +481,8 @@ func (p *Player) executeAction(ctx context.Context, page *rod.Page, action model
 	switch action.Type {
 	case "open_tab":
 		return p.executeOpenTab(ctx, page, action)
+	case "switch_active_tab":
+		return p.executeSwitchActiveTab(ctx)
 	case "switch_tab":
 		return p.executeSwitchTab(ctx, action)
 	case "click":
@@ -1857,6 +1859,105 @@ func (p *Player) executeOpenTab(ctx context.Context, page *rod.Page, action mode
 
 	// 等待页面稳定
 	time.Sleep(1 * time.Second)
+
+	return nil
+}
+
+func (p *Player) executeSwitchActiveTab(ctx context.Context) error {
+	logger.Info(ctx, "Switching to browser's active tab")
+
+	// 如果没有当前页面，无法获取浏览器实例
+	if p.currentPage == nil && len(p.pages) == 0 {
+		return fmt.Errorf("no pages available to get browser instance")
+	}
+
+	// 获取浏览器实例（从当前页面或任意一个页面）
+	var browser *rod.Browser
+	if p.currentPage != nil {
+		browser = p.currentPage.Browser()
+	} else {
+		// 如果 currentPage 为空，从 pages map 中获取任意一个页面
+		for _, pg := range p.pages {
+			browser = pg.Browser()
+			break
+		}
+	}
+
+	if browser == nil {
+		return fmt.Errorf("failed to get browser instance")
+	}
+
+	// 获取所有的标签页
+	pages, err := browser.Pages()
+	if err != nil {
+		return fmt.Errorf("failed to get browser pages: %w", err)
+	}
+
+	if len(pages) == 0 {
+		return fmt.Errorf("no pages found in browser")
+	}
+
+	logger.Info(ctx, "Found %d pages in browser", len(pages))
+
+	// 找到当前活跃的标签页
+	// rod 中，活跃的页面可以通过获取其 TargetInfo 来判断
+	var activePage *rod.Page
+	for _, page := range pages {
+		// 获取页面的 TargetInfo
+		targetInfo, err := page.Info()
+		if err != nil {
+			logger.Warn(ctx, "Failed to get page info: %v", err)
+			continue
+		}
+
+		// 检查页面类型是否为 "page" 且不是后台页面
+		if targetInfo.Type == "page" {
+			// 尝试检查页面是否是当前活跃的（attached 状态）
+			// 注意：在 Chrome DevTools Protocol 中，活跃的页面通常是 attached 状态
+			// 我们可以尝试获取页面的可见性状态
+			isVisible, visErr := page.Eval(`() => document.visibilityState === 'visible'`)
+			if visErr == nil && isVisible != nil && isVisible.Value.Bool() {
+				activePage = page
+				logger.Info(ctx, "Found active page: %s", targetInfo.URL)
+				break
+			}
+		}
+	}
+
+	// 如果没有找到明确的活跃页面，使用第一个可用的页面
+	if activePage == nil {
+		logger.Warn(ctx, "Could not determine active page, using first available page")
+		activePage = pages[0]
+	}
+
+	// 将找到的活跃页面设置为当前页面
+	p.currentPage = activePage
+
+	// 同步到 pages map 中（如果该页面不在 map 中，则添加）
+	pageFound := false
+	for idx, pg := range p.pages {
+		if pg == activePage {
+			pageFound = true
+			logger.Info(ctx, "Active page found in pages map at index: %d", idx)
+			break
+		}
+	}
+
+	if !pageFound {
+		// 如果活跃页面不在 pages map 中，添加它
+		p.tabCounter++
+		p.pages[p.tabCounter] = activePage
+		logger.Info(ctx, "Added active page to pages map with index: %d", p.tabCounter)
+	}
+
+	// 激活该页面（确保浏览器窗口也切换到该标签页）
+	_, err = activePage.Activate()
+	if err != nil {
+		logger.Warn(ctx, "Failed to activate page: %v", err)
+	}
+
+	logger.Info(ctx, "✓ Switched to browser's active tab")
+	time.Sleep(500 * time.Millisecond)
 
 	return nil
 }
