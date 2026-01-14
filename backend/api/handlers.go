@@ -343,6 +343,7 @@ func (h *Handler) SaveScript(c *gin.Context) {
 		MCPCommandName        string                  `json:"mcp_command_name"`
 		MCPCommandDescription string                  `json:"mcp_command_description"`
 		MCPInputSchema        map[string]interface{}  `json:"mcp_input_schema"`
+		Variables             map[string]string       `json:"variables"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -372,6 +373,7 @@ func (h *Handler) SaveScript(c *gin.Context) {
 		Duration:        duration,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
+		Variables:       req.Variables,
 	}
 
 	// 如果提供了 MCP 相关字段，则设置

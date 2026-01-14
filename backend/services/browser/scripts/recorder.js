@@ -1611,9 +1611,11 @@ if (window.__browserwingRecorder__) {
 					} catch (e) {
 						console.warn('[BrowserWing] Failed to check duplicates:', e);
 					}
+
+					var hasNumbers = /[0-9]/.test(textContent);
 					
-					// 如果没有重复，使用文本匹配
-					if (!hasDuplicates) {
+					// 如果没有重复且没有数字，使用文本匹配
+					if (!hasDuplicates && !hasNumbers) {
 						css = '';
 						xpath = textXPath;
 						return { css: css, xpath: xpath };
