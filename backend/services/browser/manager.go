@@ -362,6 +362,13 @@ func (m *Manager) IsRunning() bool {
 	return m.isRunning
 }
 
+// GetActivePage 获取当前活动页面
+func (m *Manager) GetActivePage() *rod.Page {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.activePage
+}
+
 // CloseActivePage 关闭当前活动页面
 func (m *Manager) CloseActivePage(ctx context.Context, page *rod.Page) error {
 	m.mu.Lock()
@@ -513,12 +520,12 @@ func (m *Manager) OpenPage(url string, language string) error {
 		UserAgent: userAgent,
 	})
 
-	// 导航到目标 URL
-	if err := page.Navigate(url); err != nil {
+	// 导航到目标 URL（设置60秒超时）
+	if err := page.Timeout(60 * time.Second).Navigate(url); err != nil {
 		return fmt.Errorf("failed to navigate to page: %w", err)
 	}
 
-	if err := page.WaitLoad(); err != nil {
+	if err := page.Timeout(60 * time.Second).WaitLoad(); err != nil {
 		return fmt.Errorf("failed to wait for page load: %w", err)
 	}
 

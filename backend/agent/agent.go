@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/Ingenimax/agent-sdk-go/pkg/memory"
 	"github.com/Ingenimax/agent-sdk-go/pkg/multitenancy"
 	"github.com/Ingenimax/agent-sdk-go/pkg/tools"
+	"github.com/browserwing/browserwing/executor"
 	browsermcp "github.com/browserwing/browserwing/mcp"
 	"github.com/browserwing/browserwing/models"
 	"github.com/browserwing/browserwing/pkg/logger"
@@ -96,8 +98,18 @@ func (t *MCPTool) Execute(ctx context.Context, input string) (string, error) {
 		return "", fmt.Errorf("failed to parse input parameters: %w", err)
 	}
 
+	// 为浏览器操作创建更长超时的 context（浏览器启动和导航需要更多时间）
+	// Executor 工具（browser_*）使用 120 秒超时，其他工具使用原有 context
+	execCtx := ctx
+	if strings.HasPrefix(t.name, "browser_") {
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+		logger.Info(ctx, "Using extended timeout (120s) for browser tool: %s", t.name)
+	}
+
 	// 调用 MCP 服务器执行脚本
-	result, err := t.mcpServer.CallTool(ctx, t.name, args)
+	result, err := t.mcpServer.CallTool(execCtx, t.name, args)
 	if err != nil {
 		return "", fmt.Errorf("failed to call MCP tool: %w", err)
 	}
@@ -207,6 +219,11 @@ func (am *AgentManager) initMCPTools() error {
 		logger.Warn(am.ctx, "Failed to initialize preset tools: %v", err)
 	}
 
+	// 初始化 Executor 工具
+	if err := am.initExecutorTools(); err != nil {
+		logger.Warn(am.ctx, "Failed to initialize executor tools: %v", err)
+	}
+
 	// 获取所有工具配置
 	toolConfigs, err := am.db.ListToolConfigs()
 	if err != nil {
@@ -262,6 +279,59 @@ func (am *AgentManager) initMCPTools() error {
 // initPresetTools 初始化预设工具
 func (am *AgentManager) initPresetTools() error {
 	return localtools.InitPresetTools(am.ctx, am.toolReg, am.db)
+}
+
+// initExecutorTools 初始化 Executor 工具
+func (am *AgentManager) initExecutorTools() error {
+	// 获取 Executor 工具元数据
+	executorTools := executor.GetExecutorToolsMetadata()
+	
+	count := 0
+	for _, meta := range executorTools {
+		// 为每个 Executor 工具创建 MCPTool 包装器
+		tool := &MCPTool{
+			name:        meta.Name,
+			description: meta.Description,
+			inputSchema: buildInputSchemaFromMetadata(meta),
+			mcpServer:   am.mcpServer,
+		}
+		
+		// 注册到工具注册表
+		am.toolReg.Register(tool)
+		count++
+	}
+	
+	logger.Info(am.ctx, "✓ Registered %d Executor tools", count)
+	return nil
+}
+
+// buildInputSchemaFromMetadata 从工具元数据构建输入 schema
+func buildInputSchemaFromMetadata(meta executor.ToolMetadata) map[string]interface{} {
+	properties := make(map[string]interface{})
+	required := []string{}
+	
+	for _, param := range meta.Parameters {
+		prop := map[string]interface{}{
+			"type":        param.Type,
+			"description": param.Description,
+		}
+		properties[param.Name] = prop
+		
+		if param.Required {
+			required = append(required, param.Name)
+		}
+	}
+	
+	schema := map[string]interface{}{
+		"type":       "object",
+		"properties": properties,
+	}
+	
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	
+	return schema
 }
 
 // startMCPWatcher 启动 MCP 命令监听器
