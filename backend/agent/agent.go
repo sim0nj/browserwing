@@ -219,7 +219,12 @@ func (am *AgentManager) initMCPTools() error {
 		logger.Warn(am.ctx, "Failed to initialize preset tools: %v", err)
 	}
 
-	// 初始化 Executor 工具
+	// 初始化 Executor 工具配置（作为预设工具）
+	if err := am.initExecutorToolConfigs(); err != nil {
+		logger.Warn(am.ctx, "Failed to initialize executor tool configs: %v", err)
+	}
+
+	// 初始化 Executor 工具到 MCP
 	if err := am.initExecutorTools(); err != nil {
 		logger.Warn(am.ctx, "Failed to initialize executor tools: %v", err)
 	}
@@ -282,12 +287,77 @@ func (am *AgentManager) initPresetTools() error {
 }
 
 // initExecutorTools 初始化 Executor 工具
+// initExecutorToolConfigs 初始化 Executor 工具配置（作为预设工具）
+func (am *AgentManager) initExecutorToolConfigs() error {
+	// 获取 Executor 工具元数据
+	executorTools := executor.GetExecutorToolsMetadata()
+
+	count := 0
+	for _, meta := range executorTools {
+		// 检查是否已存在配置
+		existingConfig, err := am.db.GetToolConfig(meta.Name)
+		if err == nil && existingConfig != nil {
+			// 配置已存在，跳过
+			continue
+		}
+
+		// 创建新的工具配置
+		config := &models.ToolConfig{
+			ID:          meta.Name,
+			Name:        meta.Name,
+			Type:        models.ToolTypePreset, // 标记为预设工具
+			Description: meta.Description,
+			Enabled:     true, // 默认启用
+			Parameters:  make(map[string]interface{}),
+		}
+
+		// 添加分类信息到参数中
+		if meta.Category != "" {
+			config.Parameters["category"] = meta.Category
+		}
+
+		// 保存到数据库
+		if err := am.db.SaveToolConfig(config); err != nil {
+			logger.Warn(am.ctx, "Failed to save executor tool config %s: %v", meta.Name, err)
+			continue
+		}
+
+		count++
+	}
+
+	if count > 0 {
+		logger.Info(am.ctx, "✓ Initialized %d Executor tool configs", count)
+	}
+	return nil
+}
+
 func (am *AgentManager) initExecutorTools() error {
 	// 获取 Executor 工具元数据
 	executorTools := executor.GetExecutorToolsMetadata()
-	
+
+	// 获取所有工具配置
+	toolConfigs, err := am.db.ListToolConfigs()
+	if err != nil {
+		logger.Warn(am.ctx, "Failed to list tool configs for executor tools: %v", err)
+		toolConfigs = []*models.ToolConfig{}
+	}
+
+	// 构建配置映射
+	configMap := make(map[string]*models.ToolConfig)
+	for _, cfg := range toolConfigs {
+		if cfg.Type == models.ToolTypePreset {
+			configMap[cfg.ID] = cfg
+		}
+	}
+
 	count := 0
 	for _, meta := range executorTools {
+		// 检查工具是否被启用
+		if config, ok := configMap[meta.Name]; ok && !config.Enabled {
+			logger.Info(am.ctx, "Executor tool %s is disabled, skipping", meta.Name)
+			continue
+		}
+
 		// 为每个 Executor 工具创建 MCPTool 包装器
 		tool := &MCPTool{
 			name:        meta.Name,
@@ -295,13 +365,13 @@ func (am *AgentManager) initExecutorTools() error {
 			inputSchema: buildInputSchemaFromMetadata(meta),
 			mcpServer:   am.mcpServer,
 		}
-		
+
 		// 注册到工具注册表
 		am.toolReg.Register(tool)
 		count++
 	}
-	
-	logger.Info(am.ctx, "✓ Registered %d Executor tools", count)
+
+	logger.Info(am.ctx, "[initExecutorTools] ✓ Registered %d Executor tools", count)
 	return nil
 }
 
@@ -309,28 +379,28 @@ func (am *AgentManager) initExecutorTools() error {
 func buildInputSchemaFromMetadata(meta executor.ToolMetadata) map[string]interface{} {
 	properties := make(map[string]interface{})
 	required := []string{}
-	
+
 	for _, param := range meta.Parameters {
 		prop := map[string]interface{}{
 			"type":        param.Type,
 			"description": param.Description,
 		}
 		properties[param.Name] = prop
-		
+
 		if param.Required {
 			required = append(required, param.Name)
 		}
 	}
-	
+
 	schema := map[string]interface{}{
 		"type":       "object",
 		"properties": properties,
 	}
-	
+
 	if len(required) > 0 {
 		schema["required"] = required
 	}
-	
+
 	return schema
 }
 

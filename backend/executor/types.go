@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 // Page 表示一个浏览器页面及其上下文
@@ -15,29 +16,37 @@ type Page struct {
 	LastUpdated time.Time
 }
 
-// SemanticTree 表示页面的语义树结构
+// SemanticTree 表示页面的语义树结构（基于 Accessibility Tree）
 type SemanticTree struct {
-	Root     *SemanticNode
-	Elements map[string]*SemanticNode // ID -> Node 映射，用于快速查找
+	Root         *SemanticNode                                           // 根节点
+	Elements     map[string]*SemanticNode                                // AXNodeID -> Node 映射
+	AXNodeMap    map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode // AXNodeID -> AXNode 映射
+	BackendIDMap map[proto.DOMBackendNodeID]*SemanticNode                // BackendNodeID -> Node 映射
 }
 
-// SemanticNode 表示页面中的一个可交互元素
+// SemanticNode 表示页面中的一个语义节点（基于 Accessibility Node）
 type SemanticNode struct {
-	ID          string                 // 唯一标识符
-	Type        string                 // 元素类型：button, input, link, select, textarea 等
-	Role        string                 // ARIA role
-	Label       string                 // 元素标签/名称
-	Placeholder string                 // 输入框的 placeholder
-	Value       string                 // 当前值
-	Text        string                 // 元素文本内容
-	Selector    string                 // CSS 选择器
-	XPath       string                 // XPath 路径
-	Attributes  map[string]string      // 所有属性
-	Position    *ElementPosition       // 元素位置信息
-	IsVisible   bool                   // 是否可见
-	IsEnabled   bool                   // 是否可用
-	Children    []*SemanticNode        // 子节点
-	Metadata    map[string]interface{} // 其他元数据
+	ID            string                        // 节点 ID（字符串形式的 AXNodeID）
+	AXNodeID      proto.AccessibilityAXNodeID   // Accessibility 节点 ID
+	BackendNodeID proto.DOMBackendNodeID        // DOM Backend 节点 ID
+	Role          string                        // Accessibility Role（如 button, link, textbox 等）
+	Label         string                        // 节点标签/名称
+	Description   string                        // 节点描述
+	Value         string                        // 节点值
+	Text          string                        // 文本内容
+	Placeholder   string                        // placeholder 属性
+	Attributes    map[string]string             // 所有属性
+	IsInteractive bool                          // 是否可交互
+	IsEnabled     bool                          // 是否启用（非 disabled）
+	Children      []*SemanticNode               // 子节点
+	Metadata      map[string]interface{}        // 其他元数据
+	
+	// 保留兼容性字段
+	Type       string           // 保留，映射到 Role
+	Selector   string           // 保留，但可能为空
+	XPath      string           // 保留，但可能为空
+	Position   *ElementPosition // 保留，但可能为空
+	IsVisible  bool             // 保留，但可能不准确
 }
 
 // ElementPosition 元素位置信息
@@ -106,5 +115,11 @@ type ExtractOptions struct {
 	Attr     string   // 属性名（type=attribute 时使用）
 	Multiple bool     // 是否提取多个元素
 	Fields   []string // 要提取的字段列表
+}
+
+// HoverOptions 鼠标悬停选项
+type HoverOptions struct {
+	WaitVisible bool          // 等待元素可见
+	Timeout     time.Duration // 超时时间
 }
 

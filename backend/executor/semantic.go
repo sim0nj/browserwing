@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"crypto/md5"
 	"fmt"
 	"strings"
 
@@ -10,273 +9,249 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-// ExtractSemanticTree 从页面提取语义树
+// ExtractSemanticTree 从页面提取语义树（基于 Accessibility Tree）
 func ExtractSemanticTree(ctx context.Context, page *rod.Page) (*SemanticTree, error) {
-	tree := &SemanticTree{
-		Elements: make(map[string]*SemanticNode),
+	fmt.Printf("[ExtractSemanticTree] Starting extraction\n")
+
+	// 检查 context 是否已经取消
+	select {
+	case <-ctx.Done():
+		fmt.Printf("[ExtractSemanticTree] Context already done: %v\n", ctx.Err())
+		return nil, ctx.Err()
+	default:
+		fmt.Printf("[ExtractSemanticTree] Context is active\n")
 	}
 
-	// 提取所有可交互元素
-	elements, err := extractInteractiveElements(ctx, page)
+	// 先禁用再启用，确保状态干净
+	fmt.Printf("[ExtractSemanticTree] Disabling accessibility...\n")
+	_ = proto.AccessibilityDisable{}.Call(page)
+
+	// 启用 Accessibility 域
+	fmt.Printf("[ExtractSemanticTree] Enabling accessibility...\n")
+	err := proto.AccessibilityEnable{}.Call(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract interactive elements: %w", err)
+		fmt.Printf("[ExtractSemanticTree] Failed to enable accessibility: %v\n", err)
+		return nil, fmt.Errorf("failed to enable accessibility: %w", err)
+	}
+	fmt.Printf("[ExtractSemanticTree] Accessibility enabled\n")
+
+	// 确保函数结束时禁用
+	defer func() {
+		fmt.Printf("[ExtractSemanticTree] Cleaning up - disabling accessibility\n")
+		_ = proto.AccessibilityDisable{}.Call(page)
+	}()
+
+	// 检查 context
+	select {
+	case <-ctx.Done():
+		fmt.Printf("[ExtractSemanticTree] Context done before getting tree: %v\n", ctx.Err())
+		return nil, ctx.Err()
+	default:
 	}
 
-	// 构建语义节点
-	for _, elem := range elements {
-		node, err := buildSemanticNode(ctx, elem)
-		if err != nil {
-			continue // 跳过无法处理的元素
+	// 获取 Accessibility Tree，不限制深度（让它获取完整树）
+	// 但我们会在后续处理时过滤
+	fmt.Printf("[ExtractSemanticTree] Getting full AX tree...\n")
+	axTree, err := proto.AccessibilityGetFullAXTree{}.Call(page)
+	if err != nil {
+		fmt.Printf("[ExtractSemanticTree] Failed to get AX tree: %v\n", err)
+		return nil, fmt.Errorf("failed to get accessibility tree: %w", err)
+	}
+	fmt.Printf("[ExtractSemanticTree] Got AX tree with %d nodes\n", len(axTree.Nodes))
+
+	if len(axTree.Nodes) == 0 {
+		fmt.Printf("[ExtractSemanticTree] AX tree is empty\n")
+		return nil, fmt.Errorf("accessibility tree is empty")
+	}
+
+	// 构建语义树
+	fmt.Printf("[ExtractSemanticTree] Building semantic tree...\n")
+	tree := &SemanticTree{
+		Elements:     make(map[string]*SemanticNode),
+		AXNodeMap:    make(map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode),
+		BackendIDMap: make(map[proto.DOMBackendNodeID]*SemanticNode),
+	}
+
+	// 构建 AX Node 映射
+	fmt.Printf("[ExtractSemanticTree] Building AX node map...\n")
+	for _, axNode := range axTree.Nodes {
+		tree.AXNodeMap[axNode.NodeID] = axNode
+	}
+	fmt.Printf("[ExtractSemanticTree] AX node map built with %d nodes\n", len(tree.AXNodeMap))
+
+	// 转换为语义节点
+	// 注意：不要过度过滤，保留所有节点，在后续查询时再过滤
+	fmt.Printf("[ExtractSemanticTree] Converting to semantic nodes...\n")
+	nodeCount := 0
+	for i, axNode := range axTree.Nodes {
+		// 检查 context
+		select {
+		case <-ctx.Done():
+			fmt.Printf("[ExtractSemanticTree] Context cancelled during node conversion at node %d/%d\n", i, len(axTree.Nodes))
+			return nil, ctx.Err()
+		default:
 		}
-		if node != nil {
-			tree.Elements[node.ID] = node
+
+		semanticNode := buildSemanticNodeFromAXNode(axNode, tree)
+		if semanticNode != nil {
+			tree.Elements[semanticNode.ID] = semanticNode
+			if semanticNode.BackendNodeID > 0 {
+				tree.BackendIDMap[semanticNode.BackendNodeID] = semanticNode
+			}
+			nodeCount++
+		}
+
+		// 每100个节点输出一次进度
+		if (i+1)%100 == 0 {
+			fmt.Printf("[ExtractSemanticTree] Processed %d/%d nodes, kept %d\n", i+1, len(axTree.Nodes), nodeCount)
 		}
 	}
+	fmt.Printf("[ExtractSemanticTree] Converted %d nodes to %d semantic nodes\n", len(axTree.Nodes), nodeCount)
 
-	// 构建树形结构（简化版，将所有节点作为根节点的子节点）
-	tree.Root = &SemanticNode{
-		ID:       "root",
-		Type:     "root",
-		Children: make([]*SemanticNode, 0, len(tree.Elements)),
-	}
-	for _, node := range tree.Elements {
-		tree.Root.Children = append(tree.Root.Children, node)
+	// 构建根节点
+	if len(axTree.Nodes) > 0 {
+		tree.Root = tree.Elements[string(axTree.Nodes[0].NodeID)]
 	}
 
+	fmt.Printf("[ExtractSemanticTree] Semantic tree extraction completed successfully\n")
 	return tree, nil
 }
 
-// extractInteractiveElements 提取所有可交互元素
-func extractInteractiveElements(ctx context.Context, page *rod.Page) (rod.Elements, error) {
-	// 定义可交互元素的选择器
-	selectors := []string{
-		// 表单元素
-		"input:not([type='hidden'])",
-		"textarea",
-		"select",
-		"button",
-		
-		// 链接
-		"a[href]",
-		
-		// 可点击元素
-		"[role='button']",
-		"[role='link']",
-		"[role='menuitem']",
-		"[role='tab']",
-		"[role='checkbox']",
-		"[role='radio']",
-		"[onclick]",
-		
-		// 其他交互元素
-		"[contenteditable='true']",
+// buildSemanticNodeFromAXNode 从 Accessibility Node 构建语义节点
+func buildSemanticNodeFromAXNode(axNode *proto.AccessibilityAXNode, tree *SemanticTree) *SemanticNode {
+	// 获取 Role
+	var role string
+	if axNode.Role != nil {
+		role = getAXValueString(axNode.Role)
 	}
 
-	allElements := rod.Elements{}
-	for _, selector := range selectors {
-		elements, err := page.Elements(selector)
-		if err != nil {
-			continue
-		}
-		allElements = append(allElements, elements...)
-	}
-
-	return allElements, nil
-}
-
-// buildSemanticNode 构建语义节点
-func buildSemanticNode(ctx context.Context, elem *rod.Element) (*SemanticNode, error) {
-	// 获取元素基本信息
-	tagName, err := elem.Eval("() => this.tagName.toLowerCase()")
-	if err != nil {
-		return nil, err
-	}
-
+	// 创建节点（不在这里过滤，保留所有节点）
 	node := &SemanticNode{
-		Type:       tagName.Value.Str(),
+		ID:         string(axNode.NodeID),
+		AXNodeID:   axNode.NodeID,
+		Role:       role,
+		Type:       role, // 保持兼容性
 		Attributes: make(map[string]string),
 		Metadata:   make(map[string]interface{}),
+		Children:   make([]*SemanticNode, 0),
 	}
 
-	// 获取常用属性
-	attributes := []string{"id", "name", "class", "type", "role", "aria-label", "placeholder", "value", "href", "title"}
-	for _, attr := range attributes {
-		if val, err := elem.Attribute(attr); err == nil && val != nil {
-			node.Attributes[attr] = *val
-		}
+	// 记录是否被忽略
+	if axNode.Ignored {
+		node.Metadata["ignored"] = true
 	}
 
-	// 设置节点属性
-	if id, ok := node.Attributes["id"]; ok && id != "" {
-		node.ID = id
-	} else {
-		// 生成唯一 ID
-		node.ID = generateElementID(elem)
+	// 设置 BackendNodeID
+	if axNode.BackendDOMNodeID > 0 {
+		node.BackendNodeID = axNode.BackendDOMNodeID
 	}
 
-	// 设置类型
-	if elemType, ok := node.Attributes["type"]; ok {
-		node.Type = elemType
+	// 获取名称（通常是元素的主要标识）
+	if axNode.Name != nil {
+		nameStr := getAXValueString(axNode.Name)
+		node.Label = nameStr
+		node.Text = nameStr
 	}
 
-	// 设置 Role
-	if role, ok := node.Attributes["role"]; ok {
-		node.Role = role
+	// 获取描述
+	if axNode.Description != nil {
+		node.Description = getAXValueString(axNode.Description)
 	}
 
-	// 设置标签
-	if ariaLabel, ok := node.Attributes["aria-label"]; ok {
-		node.Label = ariaLabel
-	} else if title, ok := node.Attributes["title"]; ok {
-		node.Label = title
-	} else if name, ok := node.Attributes["name"]; ok {
-		node.Label = name
+	// 获取值
+	if axNode.Value != nil {
+		node.Value = getAXValueString(axNode.Value)
 	}
 
-	// 设置 Placeholder
-	if placeholder, ok := node.Attributes["placeholder"]; ok {
-		node.Placeholder = placeholder
-	}
+	// 处理属性
+	if axNode.Properties != nil {
+		for _, prop := range axNode.Properties {
+			key := string(prop.Name)
+			value := getAXValueString(prop.Value)
+			node.Attributes[key] = value
 
-	// 设置值
-	if value, ok := node.Attributes["value"]; ok {
-		node.Value = value
-	}
-
-	// 获取元素文本
-	text, err := elem.Text()
-	if err == nil && text != "" {
-		node.Text = strings.TrimSpace(text)
-		if node.Label == "" {
-			node.Label = node.Text
-		}
-	}
-
-	// 如果仍然没有标签，使用元素内的文本内容（限制长度）
-	if node.Label == "" {
-		innerText, err := elem.Eval("() => this.innerText || this.textContent")
-		if err == nil && innerText.Value.Str() != "" {
-			text := strings.TrimSpace(innerText.Value.Str())
-			if len(text) > 50 {
-				text = text[:50] + "..."
-			}
-			node.Label = text
-		}
-	}
-
-	// 获取选择器
-	node.Selector = buildCSSSelector(node)
-	node.XPath = buildXPath(node)
-
-	// 获取元素位置
-	shape, err := elem.Shape()
-	if err == nil && shape != nil && len(shape.Quads) > 0 {
-		// 使用第一个 quad 来计算位置
-		quad := shape.Quads[0]
-		minX, maxX := quad[0], quad[0]
-		minY, maxY := quad[1], quad[1]
-		for i := 0; i < len(quad); i += 2 {
-			if quad[i] < minX {
-				minX = quad[i]
-			}
-			if quad[i] > maxX {
-				maxX = quad[i]
-			}
-			if quad[i+1] < minY {
-				minY = quad[i+1]
-			}
-			if quad[i+1] > maxY {
-				maxY = quad[i+1]
+			// 设置特定属性
+			switch key {
+			case "placeholder":
+				node.Placeholder = value
+			case "disabled":
+				if value == "true" {
+					node.IsEnabled = false
+				} else {
+					node.IsEnabled = true
+				}
+			case "focused":
+				if value == "true" {
+					node.Metadata["focused"] = true
+				}
+			case "readonly":
+				node.Metadata["readonly"] = value == "true"
+			case "required":
+				node.Metadata["required"] = value == "true"
 			}
 		}
-		node.Position = &ElementPosition{
-			X:      minX,
-			Y:      minY,
-			Width:  maxX - minX,
-			Height: maxY - minY,
-		}
 	}
 
-	// 检查可见性和可用性
-	visible, err := elem.Visible()
-	if err == nil {
-		node.IsVisible = visible
+	// 检查是否可交互
+	node.IsInteractive = isInteractiveRole(node.Role)
+
+	// 设置子节点引用（注意：此时子节点可能还没有被创建，所以暂时只记录 ID）
+	// 子节点关系会在所有节点创建完成后由外部代码处理
+	if axNode.ChildIDs != nil {
+		// 记录子节点 ID 到 metadata 中
+		node.Metadata["childIDs"] = axNode.ChildIDs
 	}
 
-	// 检查是否启用
-	disabled, err := elem.Property("disabled")
-	if err == nil {
-		isDisabled := disabled.Bool()
-		node.IsEnabled = !isDisabled
-	} else {
-		node.IsEnabled = true
-	}
-
-	return node, nil
+	return node
 }
 
-// generateElementID 生成元素唯一 ID
-func generateElementID(elem *rod.Element) string {
-	// 使用元素的 describe 信息生成 ID
-	desc, err := elem.Describe(1, false)
-	if err != nil {
-		return fmt.Sprintf("elem_%s", elem.Object.ObjectID)
+// getAXValueString 获取 AX Value 的字符串表示
+func getAXValueString(value *proto.AccessibilityAXValue) string {
+	if value == nil {
+		return ""
 	}
-	
-	data := fmt.Sprintf("%d_%s", desc.NodeID, desc.LocalName)
-	hash := md5.Sum([]byte(data))
-	return fmt.Sprintf("elem_%x", hash[:8])
+
+	// gson.JSON 可以通过 String() 方法转换为字符串
+	// 但需要去除 JSON 字符串的引号
+	str := value.Value.String()
+
+	// 如果是带引号的字符串，去除引号
+	if len(str) >= 2 && str[0] == '"' && str[len(str)-1] == '"' {
+		str = str[1 : len(str)-1]
+	}
+
+	return str
 }
 
-// buildCSSSelector 构建 CSS 选择器
-func buildCSSSelector(node *SemanticNode) string {
-	// 优先使用 ID
-	if id, ok := node.Attributes["id"]; ok && id != "" {
-		return "#" + id
+// isInteractiveRole 判断角色是否可交互
+func isInteractiveRole(role string) bool {
+	interactiveRoles := map[string]bool{
+		"button":           true,
+		"link":             true,
+		"textbox":          true,
+		"searchbox":        true,
+		"combobox":         true,
+		"checkbox":         true,
+		"radio":            true,
+		"slider":           true,
+		"spinbutton":       true,
+		"switch":           true,
+		"tab":              true,
+		"menuitem":         true,
+		"menuitemcheckbox": true,
+		"menuitemradio":    true,
+		"option":           true,
+		"treeitem":         true,
+		"gridcell":         true,
 	}
 
-	// 使用 name 属性
-	if name, ok := node.Attributes["name"]; ok && name != "" {
-		return fmt.Sprintf("%s[name='%s']", node.Type, name)
-	}
-
-	// 使用类型和其他属性组合
-	selector := node.Type
-	if class, ok := node.Attributes["class"]; ok && class != "" {
-		// 只使用第一个类名
-		classes := strings.Split(class, " ")
-		if len(classes) > 0 && classes[0] != "" {
-			selector += "." + classes[0]
-		}
-	}
-
-	return selector
-}
-
-// buildXPath 构建 XPath
-func buildXPath(node *SemanticNode) string {
-	// 如果有 ID，使用 ID
-	if id, ok := node.Attributes["id"]; ok && id != "" {
-		return fmt.Sprintf("//%s[@id='%s']", node.Type, id)
-	}
-
-	// 如果有 name，使用 name
-	if name, ok := node.Attributes["name"]; ok && name != "" {
-		return fmt.Sprintf("//%s[@name='%s']", node.Type, name)
-	}
-
-	// 使用文本内容
-	if node.Text != "" {
-		return fmt.Sprintf("//%s[contains(text(), '%s')]", node.Type, node.Text)
-	}
-
-	return fmt.Sprintf("//%s", node.Type)
+	return interactiveRoles[role]
 }
 
 // FindElementByLabel 通过标签查找元素
 func (tree *SemanticTree) FindElementByLabel(label string) *SemanticNode {
 	label = strings.ToLower(strings.TrimSpace(label))
-	
+
 	for _, node := range tree.Elements {
 		if strings.Contains(strings.ToLower(node.Label), label) {
 			return node
@@ -288,20 +263,20 @@ func (tree *SemanticTree) FindElementByLabel(label string) *SemanticNode {
 			return node
 		}
 	}
-	
+
 	return nil
 }
 
 // FindElementByType 通过类型查找元素
 func (tree *SemanticTree) FindElementsByType(elemType string) []*SemanticNode {
 	result := make([]*SemanticNode, 0)
-	
+
 	for _, node := range tree.Elements {
 		if node.Type == elemType {
 			result = append(result, node)
 		}
 	}
-	
+
 	return result
 }
 
@@ -313,121 +288,145 @@ func (tree *SemanticTree) FindElementByID(id string) *SemanticNode {
 // GetVisibleElements 获取所有可见元素
 func (tree *SemanticTree) GetVisibleElements() []*SemanticNode {
 	result := make([]*SemanticNode, 0)
-	
+
 	for _, node := range tree.Elements {
 		if node.IsVisible {
 			result = append(result, node)
 		}
 	}
-	
+
 	return result
 }
 
-// GetClickableElements 获取所有可点击元素
+// GetClickableElements 获取所有可点击元素（基于 Accessibility Role）
 func (tree *SemanticTree) GetClickableElements() []*SemanticNode {
 	result := make([]*SemanticNode, 0)
-	clickableTypes := map[string]bool{
-		"button": true,
-		"a":      true,
-		"submit": true,
+
+	clickableRoles := map[string]bool{
+		"button":           true,
+		"link":             true,
+		"menuitem":         true,
+		"menuitemcheckbox": true,
+		"menuitemradio":    true,
+		"tab":              true,
+		"checkbox":         true,
+		"radio":            true,
+		"switch":           true,
+		"treeitem":         true,
 	}
-	
+
 	for _, node := range tree.Elements {
-		if node.IsVisible && node.IsEnabled {
-			if clickableTypes[node.Type] || node.Role == "button" || node.Role == "link" {
+		// 跳过被忽略的节点
+		if ignored, ok := node.Metadata["ignored"].(bool); ok && ignored {
+			continue
+		}
+
+		// 跳过没有 BackendNodeID 的节点（无法操作）
+		if node.BackendNodeID == 0 {
+			continue
+		}
+
+		// 基于 Accessibility Role 判断
+		if clickableRoles[node.Role] {
+			// 至少要有名称或文本
+			if node.Label != "" || node.Text != "" || node.Description != "" {
 				result = append(result, node)
 			}
 		}
 	}
-	
+
 	return result
 }
 
-// GetInputElements 获取所有输入元素
+// GetInputElements 获取所有输入元素（基于 Accessibility Role）
 func (tree *SemanticTree) GetInputElements() []*SemanticNode {
 	result := make([]*SemanticNode, 0)
-	inputTypes := map[string]bool{
-		"text":     true,
-		"email":    true,
-		"password": true,
-		"search":   true,
-		"tel":      true,
-		"url":      true,
-		"number":   true,
-		"textarea": true,
+
+	inputRoles := map[string]bool{
+		"textbox":    true,
+		"searchbox":  true,
+		"combobox":   true,
+		"spinbutton": true,
+		"slider":     true,
 	}
-	
+
 	for _, node := range tree.Elements {
-		if node.IsVisible && node.IsEnabled {
-			if inputTypes[node.Type] {
-				result = append(result, node)
-			}
+		// 跳过被忽略的节点
+		if ignored, ok := node.Metadata["ignored"].(bool); ok && ignored {
+			continue
+		}
+
+		// 跳过没有 BackendNodeID 的节点（无法操作）
+		if node.BackendNodeID == 0 {
+			continue
+		}
+
+		// 基于 Accessibility Role 判断
+		if inputRoles[node.Role] {
+			result = append(result, node)
 		}
 	}
-	
+
 	return result
 }
 
 // SerializeToSimpleText 将语义树序列化为简单文本（用于 LLM）
 func (tree *SemanticTree) SerializeToSimpleText() string {
 	var builder strings.Builder
-	builder.WriteString("Page Interactive Elements:\n\n")
-	
+	builder.WriteString("Page Interactive Elements:\n")
+	builder.WriteString("(Use the exact identifier like 'Clickable Element [1]' or 'Input Element [1]' to interact with elements)\n\n")
+
 	// 按类型分组
 	clickable := tree.GetClickableElements()
 	inputs := tree.GetInputElements()
-	
+
 	if len(clickable) > 0 {
-		builder.WriteString("Clickable Elements:\n")
+		builder.WriteString("Clickable Elements (use identifier like 'Clickable Element [N]'):\n")
 		for i, node := range clickable {
 			// 生成更明确的标识
 			label := node.Label
 			if label == "" {
 				label = node.Text
 			}
-			if label == "" && node.Attributes["id"] != "" {
-				label = fmt.Sprintf("id:%s", node.Attributes["id"])
-			}
-			if label == "" && node.Attributes["name"] != "" {
-				label = fmt.Sprintf("name:%s", node.Attributes["name"])
+			if label == "" {
+				label = node.Description
 			}
 			if label == "" {
-				label = fmt.Sprintf("<%s>", node.Type)
+				label = fmt.Sprintf("<%s>", node.Role)
 			}
-			
-			builder.WriteString(fmt.Sprintf("  Clickable Element [%d]: %s", i+1, label))
-			if node.Type != "" {
-				builder.WriteString(fmt.Sprintf(" (type: %s)", node.Type))
+
+			// 格式：[索引] 标签 - 角色 - 描述
+			builder.WriteString(fmt.Sprintf("  [%d] %s", i+1, label))
+			if node.Role != "" {
+				builder.WriteString(fmt.Sprintf(" (role: %s)", node.Role))
 			}
-			if node.Text != "" && node.Text != node.Label {
-				builder.WriteString(fmt.Sprintf(" - %s", node.Text))
+			if node.Description != "" && node.Description != label {
+				builder.WriteString(fmt.Sprintf(" - %s", node.Description))
 			}
 			builder.WriteString("\n")
 		}
 		builder.WriteString("\n")
 	}
-	
+
 	if len(inputs) > 0 {
-		builder.WriteString("Input Elements:\n")
+		builder.WriteString("Input Elements (use identifier like 'Input Element [N]'):\n")
 		for i, node := range inputs {
 			// 生成更明确的标识
 			label := node.Label
 			if label == "" {
 				label = node.Placeholder
 			}
-			if label == "" && node.Attributes["id"] != "" {
-				label = fmt.Sprintf("id:%s", node.Attributes["id"])
-			}
-			if label == "" && node.Attributes["name"] != "" {
-				label = fmt.Sprintf("name:%s", node.Attributes["name"])
+			if label == "" {
+				label = node.Description
 			}
 			if label == "" {
-				label = fmt.Sprintf("<%s>", node.Type)
+				label = fmt.Sprintf("<%s>", node.Role)
 			}
-			
-			builder.WriteString(fmt.Sprintf("  Input Element [%d]: %s", i+1, label))
-			if node.Type != "" && node.Type != "text" {
-				builder.WriteString(fmt.Sprintf(" (type: %s)", node.Type))
+
+			// 格式：[索引] 标签 - 角色 - placeholder - value
+			builder.WriteString(fmt.Sprintf("  [%d] %s", i+1, label))
+			if node.Role != "" {
+				builder.WriteString(fmt.Sprintf(" (role: %s)", node.Role))
 			}
 			if node.Placeholder != "" && node.Placeholder != label {
 				builder.WriteString(fmt.Sprintf(" [placeholder: %s]", node.Placeholder))
@@ -438,7 +437,7 @@ func (tree *SemanticTree) SerializeToSimpleText() string {
 			builder.WriteString("\n")
 		}
 	}
-	
+
 	return builder.String()
 }
 
@@ -448,7 +447,7 @@ func HighlightElement(ctx context.Context, page *rod.Page, selector string) erro
 	if err != nil {
 		return err
 	}
-	
+
 	// 添加高亮样式
 	_, err = elem.Eval(`function() {
 		this.style.outline = '3px solid red';
@@ -458,7 +457,7 @@ func HighlightElement(ctx context.Context, page *rod.Page, selector string) erro
 			this.style.outlineOffset = '';
 		}, 2000);
 	}`)
-	
+
 	return err
 }
 
@@ -467,18 +466,18 @@ func WaitForElement(ctx context.Context, page *rod.Page, selector string, opts *
 	if opts == nil {
 		opts = &WaitForOptions{}
 	}
-	
+
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = 30 * 1000000000 // 30秒
 	}
-	
+
 	// 等待元素
 	elem, err := page.Timeout(timeout).Element(selector)
 	if err != nil {
 		return fmt.Errorf("element not found: %s", selector)
 	}
-	
+
 	// 根据状态等待
 	switch opts.State {
 	case "visible":
@@ -496,7 +495,7 @@ func EvaluateAccessibility(ctx context.Context, page *rod.Page) (*AccessibilityR
 	report := &AccessibilityReport{
 		Issues: make([]AccessibilityIssue, 0),
 	}
-	
+
 	// 检查没有 alt 属性的图片
 	images, _ := page.Elements("img:not([alt])")
 	for _, img := range images {
@@ -508,7 +507,7 @@ func EvaluateAccessibility(ctx context.Context, page *rod.Page) (*AccessibilityR
 			Element:  fmt.Sprintf("<img src='%s'>", *src),
 		})
 	}
-	
+
 	// 检查没有 label 的输入框
 	inputs, _ := page.Elements("input:not([type='hidden']):not([aria-label]):not([id])")
 	for range inputs {
@@ -518,15 +517,15 @@ func EvaluateAccessibility(ctx context.Context, page *rod.Page) (*AccessibilityR
 			Message:  "Input field missing label or aria-label",
 		})
 	}
-	
+
 	report.TotalIssues = len(report.Issues)
 	return report, nil
 }
 
 // AccessibilityReport 可访问性报告
 type AccessibilityReport struct {
-	TotalIssues int                   `json:"total_issues"`
-	Issues      []AccessibilityIssue  `json:"issues"`
+	TotalIssues int                  `json:"total_issues"`
+	Issues      []AccessibilityIssue `json:"issues"`
 }
 
 // AccessibilityIssue 可访问性问题
@@ -537,33 +536,42 @@ type AccessibilityIssue struct {
 	Element  string `json:"element,omitempty"`
 }
 
-// GetElementFromPage 从页面获取 Rod Element
+// GetElementFromPage 从页面获取 Rod Element（基于 BackendNodeID）
 func GetElementFromPage(ctx context.Context, page *rod.Page, node *SemanticNode) (*rod.Element, error) {
-	// 优先使用 ID
-	if id, ok := node.Attributes["id"]; ok && id != "" {
-		elem, err := page.Element("#" + id)
-		if err == nil {
-			return elem, nil
-		}
+	if node.BackendNodeID == 0 {
+		return nil, fmt.Errorf("node has no backend node ID")
 	}
-	
-	// 使用构建的选择器
-	if node.Selector != "" {
-		elem, err := page.Element(node.Selector)
-		if err == nil {
-			return elem, nil
-		}
+
+	// 使用 DOM.resolveNode 将 BackendNodeID 转换为 ObjectID
+	obj, err := proto.DOMResolveNode{
+		BackendNodeID: node.BackendNodeID,
+	}.Call(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve backend node: %w", err)
 	}
-	
-	// 使用 XPath
-	if node.XPath != "" {
-		elem, err := page.ElementX(node.XPath)
-		if err == nil {
-			return elem, nil
-		}
+
+	if obj.Object.ObjectID == "" {
+		return nil, fmt.Errorf("resolved object has no object ID")
 	}
-	
-	return nil, fmt.Errorf("element not found: %s", node.Label)
+
+	// 创建 Rod Element
+	elem, err := page.ElementFromObject(obj.Object)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create element from object: %w", err)
+	}
+
+	return elem, nil
+}
+
+// GetElementByAXNodeID 通过 AX Node ID 获取 Rod Element
+func GetElementByAXNodeID(ctx context.Context, page *rod.Page, tree *SemanticTree, axNodeID proto.AccessibilityAXNodeID) (*rod.Element, error) {
+	// 从树中查找节点
+	node, ok := tree.Elements[string(axNodeID)]
+	if !ok {
+		return nil, fmt.Errorf("AX node not found: %s", axNodeID)
+	}
+
+	return GetElementFromPage(ctx, page, node)
 }
 
 // InjectAccessibilityHelpers 注入辅助脚本
@@ -594,7 +602,7 @@ func InjectAccessibilityHelpers(ctx context.Context, page *rod.Page) error {
 			};
 		};
 	}`)
-	
+
 	return err
 }
 
@@ -607,4 +615,3 @@ func ScrollToElement(ctx context.Context, elem *rod.Element) error {
 func GetElementScreenshot(ctx context.Context, elem *rod.Element) ([]byte, error) {
 	return elem.Screenshot(proto.PageCaptureScreenshotFormatPng, 100)
 }
-

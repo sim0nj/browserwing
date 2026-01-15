@@ -14,10 +14,13 @@ import (
 
 // Navigate 导航到指定 URL
 func (e *Executor) Navigate(ctx context.Context, url string, opts *NavigateOptions) (*OperationResult, error) {
+	logger.Info(ctx, "[Navigate] Starting navigation to %s", url)
+
 	if !e.Browser.IsRunning() {
-		logger.Error(ctx, "Browser is not running")
+		logger.Error(ctx, "[Navigate] Browser is not running")
 		return nil, fmt.Errorf("browser is not running")
 	}
+	logger.Info(ctx, "[Navigate] Browser is running")
 
 	if opts == nil {
 		opts = &NavigateOptions{
@@ -25,43 +28,52 @@ func (e *Executor) Navigate(ctx context.Context, url string, opts *NavigateOptio
 			Timeout:   60 * time.Second, // 增加默认超时到60秒
 		}
 	}
+	logger.Info(ctx, "[Navigate] Using timeout: %v, wait_until: %s", opts.Timeout, opts.WaitUntil)
 
 	// 获取或创建页面
+	logger.Info(ctx, "[Navigate] Getting active page...")
 	page := e.Browser.GetActivePage()
 	if page == nil {
+		logger.Info(ctx, "[Navigate] No active page, creating new page...")
 		// 如果没有活动页面，通过 OpenPage 创建新页面（会自动导航）
-		err := e.Browser.OpenPage(url, "zh-CN")
+		err := e.Browser.OpenPage(url, "", true)
 		if err != nil {
-			logger.Error(ctx, "Failed to open page: %s", err.Error())
+			logger.Error(ctx, "[Navigate] Failed to open page: %s", err.Error())
 			return &OperationResult{
 				Success:   false,
 				Error:     err.Error(),
 				Timestamp: time.Now(),
 			}, err
 		}
+		logger.Info(ctx, "[Navigate] Page opened successfully")
+
 		page = e.Browser.GetActivePage()
 		if page == nil {
-			logger.Error(ctx, "Failed to get active page after opening")
+			logger.Error(ctx, "[Navigate] Failed to get active page after opening")
 			return &OperationResult{
 				Success:   false,
 				Error:     "Failed to get active page",
 				Timestamp: time.Now(),
 			}, fmt.Errorf("failed to get active page")
 		}
+		logger.Info(ctx, "[Navigate] Got active page")
 	} else {
+		logger.Info(ctx, "[Navigate] Using existing page, navigating...")
 		// 如果已有活动页面，直接导航
 		err := page.Timeout(opts.Timeout).Navigate(url)
 		if err != nil {
-			logger.Error(ctx, "Failed to navigate to page: %s", err.Error())
+			logger.Error(ctx, "[Navigate] Failed to navigate to page: %s", err.Error())
 			return &OperationResult{
 				Success:   false,
 				Error:     err.Error(),
 				Timestamp: time.Now(),
 			}, err
 		}
+		logger.Info(ctx, "[Navigate] Navigation completed")
 	}
 
 	// 等待页面加载
+	logger.Info(ctx, "[Navigate] Waiting for page load (condition: %s)...", opts.WaitUntil)
 	switch opts.WaitUntil {
 	case "domcontentloaded":
 		page.WaitLoad()
@@ -70,17 +82,50 @@ func (e *Executor) Navigate(ctx context.Context, url string, opts *NavigateOptio
 	default:
 		page.WaitLoad()
 	}
+	logger.Info(ctx, "[Navigate] Page load completed")
 
-	logger.Info(ctx, "Successfully navigated to %s", url)
+	logger.Info(ctx, "[Navigate] Successfully navigated to %s", url)
 
-	return &OperationResult{
+	// 获取页面语义树（带超时控制）
+	// 注意：这里同步调用，但用带超时的 context
+	var semanticTreeText string
+
+	logger.Info(ctx, "[Navigate] Starting semantic tree extraction...")
+	// 创建一个带超时的 context（10秒超时）
+	treeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 直接调用，不使用 goroutine 避免资源竞争
+	tree, err := e.GetSemanticTree(treeCtx)
+	if err != nil {
+		if err == context.DeadlineExceeded {
+			logger.Warn(ctx, "[Navigate] Semantic tree extraction timed out after 10s")
+		} else if err != context.Canceled {
+			logger.Warn(ctx, "[Navigate] Failed to extract semantic tree: %s", err.Error())
+		}
+		// 不影响导航成功，只是没有语义树
+	} else if tree != nil {
+		semanticTreeText = tree.SerializeToSimpleText()
+		logger.Info(ctx, "[Navigate] Successfully extracted semantic tree with %d elements", len(tree.Elements))
+	} else {
+		logger.Warn(ctx, "[Navigate] Semantic tree is nil")
+	}
+
+	result := &OperationResult{
 		Success:   true,
 		Message:   "Successfully navigated to " + url,
 		Timestamp: time.Now(),
 		Data: map[string]interface{}{
 			"url": url,
 		},
-	}, nil
+	}
+
+	// 如果获取到语义树，添加到返回结果中
+	if semanticTreeText != "" {
+		result.Data["semantic_tree"] = semanticTreeText
+	}
+
+	return result, nil
 }
 
 // Click 点击元素
@@ -101,8 +146,8 @@ func (e *Executor) Click(ctx context.Context, identifier string, opts *ClickOpti
 		}
 	}
 
-	// 查找元素
-	elem, err := e.findElement(ctx, page, identifier)
+	// 查找元素（带超时）
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, opts.Timeout)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -117,7 +162,7 @@ func (e *Executor) Click(ctx context.Context, identifier string, opts *ClickOpti
 		if err := elem.WaitVisible(); err != nil {
 			return &OperationResult{
 				Success:   false,
-				Error:     fmt.Sprintf("Element not visible: %s", identifier),
+				Error:     fmt.Sprintf("Element not visible: %s (timeout after %v)", identifier, opts.Timeout),
 				Timestamp: time.Now(),
 			}, err
 		}
@@ -129,7 +174,7 @@ func (e *Executor) Click(ctx context.Context, identifier string, opts *ClickOpti
 		if err := elem.WaitEnabled(); err != nil {
 			return &OperationResult{
 				Success:   false,
-				Error:     fmt.Sprintf("Element not enabled: %s", identifier),
+				Error:     fmt.Sprintf("Element not enabled: %s (timeout after %v)", identifier, opts.Timeout),
 				Timestamp: time.Now(),
 			}, err
 		}
@@ -191,8 +236,8 @@ func (e *Executor) Type(ctx context.Context, identifier string, text string, opt
 		}
 	}
 
-	// 查找元素
-	elem, err := e.findElement(ctx, page, identifier)
+	// 查找元素（带超时）
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, opts.Timeout)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -207,7 +252,7 @@ func (e *Executor) Type(ctx context.Context, identifier string, text string, opt
 		if err := elem.WaitVisible(); err != nil {
 			return &OperationResult{
 				Success:   false,
-				Error:     fmt.Sprintf("Element not visible: %s", identifier),
+				Error:     fmt.Sprintf("Element not visible: %s (timeout after %v)", identifier, opts.Timeout),
 				Timestamp: time.Now(),
 			}, err
 		}
@@ -277,8 +322,8 @@ func (e *Executor) Select(ctx context.Context, identifier string, value string, 
 		}
 	}
 
-	// 查找元素
-	elem, err := e.findElement(ctx, page, identifier)
+	// 查找元素（带超时）
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, opts.Timeout)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -293,7 +338,7 @@ func (e *Executor) Select(ctx context.Context, identifier string, value string, 
 		if err := elem.WaitVisible(); err != nil {
 			return &OperationResult{
 				Success:   false,
-				Error:     fmt.Sprintf("Element not visible: %s", identifier),
+				Error:     fmt.Sprintf("Element not visible: %s (timeout after %v)", identifier, opts.Timeout),
 				Timestamp: time.Now(),
 			}, err
 		}
@@ -325,7 +370,8 @@ func (e *Executor) GetText(ctx context.Context, identifier string) (*OperationRe
 		return nil, fmt.Errorf("no active page")
 	}
 
-	elem, err := e.findElement(ctx, page, identifier)
+	// 使用默认10秒超时
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, 10*time.Second)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -360,7 +406,8 @@ func (e *Executor) GetValue(ctx context.Context, identifier string) (*OperationR
 		return nil, fmt.Errorf("no active page")
 	}
 
-	elem, err := e.findElement(ctx, page, identifier)
+	// 使用默认10秒超时
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, 10*time.Second)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -459,7 +506,8 @@ func (e *Executor) WaitFor(ctx context.Context, identifier string, opts *WaitFor
 		}
 	}
 
-	elem, err := e.findElement(ctx, page, identifier)
+	// 查找元素（带超时）
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, opts.Timeout)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -484,7 +532,7 @@ func (e *Executor) WaitFor(ctx context.Context, identifier string, opts *WaitFor
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
-			Error:     fmt.Sprintf("Wait failed: %s", err.Error()),
+			Error:     fmt.Sprintf("Wait failed for state '%s': %s (timeout after %v)", opts.State, err.Error(), opts.Timeout),
 			Timestamp: time.Now(),
 		}, err
 	}
@@ -642,44 +690,52 @@ func (e *Executor) extractElementData(elem *rod.Element, opts *ExtractOptions) (
 	return data, nil
 }
 
-// findElement 查找元素（支持多种方式）
+// findElement 查找元素（支持多种方式），带超时支持
 func (e *Executor) findElement(ctx context.Context, page *rod.Page, identifier string) (*rod.Element, error) {
+	return e.findElementWithTimeout(ctx, page, identifier, 10*time.Second)
+}
+
+// findElementWithTimeout 查找元素（支持多种方式），带自定义超时
+func (e *Executor) findElementWithTimeout(ctx context.Context, page *rod.Page, identifier string, timeout time.Duration) (*rod.Element, error) {
+	// 设置超时
+	timeoutPage := page.Timeout(timeout)
+
 	// 0. 尝试解析语义树索引格式，例如 "Input Element [1]", "Clickable Element [2]", "[3]"
 	if elem, err := e.findElementBySemanticIndex(ctx, page, identifier); err == nil && elem != nil {
 		return elem, nil
 	}
 
 	// 1. 尝试作为 CSS 选择器
-	if elem, err := page.Element(identifier); err == nil {
+	if elem, err := timeoutPage.Element(identifier); err == nil {
 		return elem, nil
 	}
 
 	// 2. 尝试作为 XPath
-	if elem, err := page.ElementX(identifier); err == nil {
+	if elem, err := timeoutPage.ElementX(identifier); err == nil {
 		return elem, nil
 	}
 
 	// 3. 尝试通过文本查找
-	if elem, err := page.ElementR("button", identifier); err == nil {
+	if elem, err := timeoutPage.ElementR("button", identifier); err == nil {
 		return elem, nil
 	}
-	if elem, err := page.ElementR("a", identifier); err == nil {
+	if elem, err := timeoutPage.ElementR("a", identifier); err == nil {
 		return elem, nil
 	}
 
 	// 4. 尝试通过 aria-label 查找
 	selector := fmt.Sprintf("[aria-label*='%s']", identifier)
-	if elem, err := page.Element(selector); err == nil {
+	if elem, err := timeoutPage.Element(selector); err == nil {
 		return elem, nil
 	}
 
 	// 5. 尝试通过 placeholder 查找
 	selector = fmt.Sprintf("[placeholder*='%s']", identifier)
-	if elem, err := page.Element(selector); err == nil {
+	if elem, err := timeoutPage.Element(selector); err == nil {
 		return elem, nil
 	}
 
-	return nil, fmt.Errorf("element not found: %s", identifier)
+	return nil, fmt.Errorf("element not found: %s (timeout after %v)", identifier, timeout)
 }
 
 // findElementBySemanticIndex 通过语义树索引查找元素
@@ -782,13 +838,21 @@ func (e *Executor) findElementBySemanticIndex(ctx context.Context, page *rod.Pag
 }
 
 // Hover 鼠标悬停
-func (e *Executor) Hover(ctx context.Context, identifier string) (*OperationResult, error) {
+func (e *Executor) Hover(ctx context.Context, identifier string, opts *HoverOptions) (*OperationResult, error) {
 	page := e.Browser.GetActivePage()
 	if page == nil {
 		return nil, fmt.Errorf("no active page")
 	}
 
-	elem, err := e.findElement(ctx, page, identifier)
+	if opts == nil {
+		opts = &HoverOptions{
+			WaitVisible: true,
+			Timeout:     10 * time.Second,
+		}
+	}
+
+	// 查找元素
+	elem, err := e.findElementWithTimeout(ctx, page, identifier, opts.Timeout)
 	if err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -797,6 +861,19 @@ func (e *Executor) Hover(ctx context.Context, identifier string) (*OperationResu
 		}, err
 	}
 
+	// 等待元素可见
+	if opts.WaitVisible {
+		elem = elem.Timeout(opts.Timeout)
+		if err := elem.WaitVisible(); err != nil {
+			return &OperationResult{
+				Success:   false,
+				Error:     fmt.Sprintf("Element not visible: %s", identifier),
+				Timestamp: time.Now(),
+			}, err
+		}
+	}
+
+	// 悬停
 	if err := elem.Hover(); err != nil {
 		return &OperationResult{
 			Success:   false,
@@ -807,7 +884,7 @@ func (e *Executor) Hover(ctx context.Context, identifier string) (*OperationResu
 
 	return &OperationResult{
 		Success:   true,
-		Message:   "Successfully hovered over element",
+		Message:   fmt.Sprintf("Successfully hovered over element: %s", identifier),
 		Timestamp: time.Now(),
 	}, nil
 }

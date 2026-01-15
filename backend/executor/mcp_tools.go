@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -88,22 +89,48 @@ func (r *MCPToolRegistry) registerNavigateTool() error {
 	)
 
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		fmt.Printf("[MCP Handler] browser_navigate called\n")
+
 		args := request.Params.Arguments.(map[string]interface{})
 		url, _ := args["url"].(string)
-		
+		fmt.Printf("[MCP Handler] URL: %s\n", url)
+
+		// 检查 context
+		select {
+		case <-ctx.Done():
+			fmt.Printf("[MCP Handler] Context already done: %v\n", ctx.Err())
+			return mcpgo.NewToolResultError(fmt.Sprintf("context error: %v", ctx.Err())), nil
+		default:
+			fmt.Printf("[MCP Handler] Context is active\n")
+		}
+
 		opts := &NavigateOptions{
 			WaitUntil: "load",
+			Timeout:   60 * time.Second, // 设置默认超时
 		}
 		if waitUntil, ok := args["wait_until"].(string); ok && waitUntil != "" {
 			opts.WaitUntil = waitUntil
 		}
+		fmt.Printf("[MCP Handler] Options: WaitUntil=%s, Timeout=%v\n", opts.WaitUntil, opts.Timeout)
 
+		fmt.Printf("[MCP Handler] Calling executor.Navigate...\n")
 		result, err := r.executor.Navigate(ctx, url, opts)
 		if err != nil {
+			fmt.Printf("[MCP Handler] Navigate failed: %v\n", err)
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
+		fmt.Printf("[MCP Handler] Navigate succeeded\n")
 
-		return mcpgo.NewToolResultText(result.Message), nil
+		// 构建返回文本，包含消息和语义树
+		var responseText string
+		responseText = result.Message
+
+		// 如果有语义树数据，添加到响应中
+		if semanticTree, ok := result.Data["semantic_tree"].(string); ok && semanticTree != "" {
+			responseText += "\n\n" + semanticTree
+		}
+
+		return mcpgo.NewToolResultText(responseText), nil
 	}
 
 	r.mcpServer.AddTool(tool, handler)
@@ -122,9 +149,13 @@ func (r *MCPToolRegistry) registerClickTool() error {
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
 		identifier, _ := args["identifier"].(string)
-		
+
 		opts := &ClickOptions{
 			WaitVisible: true,
+			WaitEnabled: true,
+			Timeout:     10 * time.Second,
+			Button:      "left",
+			ClickCount:  1,
 		}
 		if waitVisible, ok := args["wait_visible"].(bool); ok {
 			opts.WaitVisible = waitVisible
@@ -156,9 +187,12 @@ func (r *MCPToolRegistry) registerTypeTool() error {
 		args := request.Params.Arguments.(map[string]interface{})
 		identifier, _ := args["identifier"].(string)
 		text, _ := args["text"].(string)
-		
+
 		opts := &TypeOptions{
-			Clear: true,
+			Clear:       true,
+			WaitVisible: true,
+			Timeout:     10 * time.Second,
+			Delay:       0,
 		}
 		if clear, ok := args["clear"].(bool); ok {
 			opts.Clear = clear
@@ -190,7 +224,12 @@ func (r *MCPToolRegistry) registerSelectTool() error {
 		identifier, _ := args["identifier"].(string)
 		value, _ := args["value"].(string)
 
-		result, err := r.executor.Select(ctx, identifier, value, nil)
+		opts := &SelectOptions{
+			WaitVisible: true,
+			Timeout:     10 * time.Second,
+		}
+
+		result, err := r.executor.Select(ctx, identifier, value, opts)
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
@@ -213,13 +252,13 @@ func (r *MCPToolRegistry) registerScreenshotTool() error {
 
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
-		
+
 		opts := &ScreenshotOptions{
 			FullPage: false,
 			Quality:  80,
 			Format:   "png",
 		}
-		
+
 		if fullPage, ok := args["full_page"].(bool); ok {
 			opts.FullPage = fullPage
 		}
@@ -252,13 +291,13 @@ func (r *MCPToolRegistry) registerExtractTool() error {
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
 		selector, _ := args["selector"].(string)
-		
+
 		opts := &ExtractOptions{
 			Selector: selector,
 			Type:     "text",
 			Multiple: false,
 		}
-		
+
 		if extractType, ok := args["type"].(string); ok && extractType != "" {
 			opts.Type = extractType
 		}
@@ -290,7 +329,7 @@ func (r *MCPToolRegistry) registerGetSemanticTreeTool() error {
 
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
-		
+
 		simple := true
 		if simpleArg, ok := args["simple"].(bool); ok {
 			simple = simpleArg
@@ -350,13 +389,18 @@ func (r *MCPToolRegistry) registerWaitForTool() error {
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
 		identifier, _ := args["identifier"].(string)
-		
+
 		opts := &WaitForOptions{
-			State: "visible",
+			State:   "visible",
+			Timeout: 30 * time.Second,
 		}
-		
+
 		if state, ok := args["state"].(string); ok && state != "" {
 			opts.State = state
+		}
+
+		if timeout, ok := args["timeout"].(float64); ok && timeout > 0 {
+			opts.Timeout = time.Duration(timeout) * time.Second
 		}
 
 		result, err := r.executor.WaitFor(ctx, identifier, opts)
@@ -382,7 +426,7 @@ func (r *MCPToolRegistry) registerScrollTool() error {
 	handler := func(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := request.Params.Arguments.(map[string]interface{})
 		direction, _ := args["direction"].(string)
-		
+
 		var result *OperationResult
 		var err error
 
@@ -544,4 +588,3 @@ type ToolParameter struct {
 	Required    bool   `json:"required"`
 	Description string `json:"description"`
 }
-

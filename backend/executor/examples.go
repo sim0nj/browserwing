@@ -11,7 +11,7 @@ import (
 // ExampleBasicNavigation 示例：基本导航
 func ExampleBasicNavigation() error {
 	ctx := context.Background()
-	
+
 	// 创建浏览器管理器
 	// 注意：在实际使用中，需要提供正确的 config, storage, llmManager 参数
 	browserMgr := browser.NewManager(nil, nil, nil)
@@ -28,7 +28,7 @@ func ExampleBasicNavigation() error {
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Printf("Navigation result: %s\n", result.Message)
 	return nil
 }
@@ -36,7 +36,7 @@ func ExampleBasicNavigation() error {
 // ExampleClickAndType 示例：点击和输入
 func ExampleClickAndType() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -72,7 +72,7 @@ func ExampleClickAndType() error {
 // ExampleSemanticTree 示例：使用语义树
 func ExampleSemanticTree() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -91,23 +91,28 @@ func ExampleSemanticTree() error {
 	}
 
 	// 打印所有可点击元素
-	fmt.Println("Clickable Elements:")
+	fmt.Println("Clickable Elements (use 'Clickable Element [N]' as identifier):")
 	clickable := tree.GetClickableElements()
 	for i, node := range clickable {
-		fmt.Printf("  [%d] %s (type: %s)\n", i+1, node.Label, node.Type)
+		fmt.Printf("  [%d] %s (role: %s)\n", i+1, node.Label, node.Role)
 	}
 
 	// 打印所有输入元素
-	fmt.Println("\nInput Elements:")
+	fmt.Println("\nInput Elements (use 'Input Element [N]' as identifier):")
 	inputs := tree.GetInputElements()
 	for i, node := range inputs {
 		fmt.Printf("  [%d] %s (placeholder: %s)\n", i+1, node.Label, node.Placeholder)
 	}
 
-	// 通过标签查找并点击元素
-	node := tree.FindElementByLabel("Login")
-	if node != nil {
-		executor.Click(ctx, node.Selector, nil)
+	// 推荐方式：使用语义树索引来点击元素
+	// 例如：点击第一个可点击元素
+	if len(clickable) > 0 {
+		executor.Click(ctx, "Clickable Element [1]", nil)
+	}
+
+	// 或者：在第一个输入框中输入文本
+	if len(inputs) > 0 {
+		executor.Type(ctx, "Input Element [1]", "test input", nil)
 	}
 
 	return nil
@@ -116,7 +121,7 @@ func ExampleSemanticTree() error {
 // ExampleSmartInteraction 示例：智能交互（通过标签）
 func ExampleSmartInteraction() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -155,7 +160,7 @@ func ExampleSmartInteraction() error {
 // ExampleDataExtraction 示例：数据提取
 func ExampleDataExtraction() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -193,7 +198,7 @@ func ExampleDataExtraction() error {
 // ExampleBatchOperations 示例：批量操作
 func ExampleBatchOperations() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -260,7 +265,7 @@ func ExampleBatchOperations() error {
 // ExampleWaitAndScreenshot 示例：等待和截图
 func ExampleWaitAndScreenshot() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -299,7 +304,7 @@ func ExampleWaitAndScreenshot() error {
 // ExampleFormFilling 示例：表单填写
 func ExampleFormFilling() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -339,7 +344,7 @@ func ExampleFormFilling() error {
 // ExampleAdvancedNavigation 示例：高级导航
 func ExampleAdvancedNavigation() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -350,24 +355,24 @@ func ExampleAdvancedNavigation() error {
 
 	// 导航到页面
 	executor.Navigate(ctx, "https://example.com/page1", nil)
-	
+
 	// 点击链接导航到另一页
 	executor.Click(ctx, "a[href='/page2']", nil)
-	
+
 	// 后退
 	result, err := executor.GoBack(ctx)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Navigation back: %s\n", result.Message)
-	
+
 	// 前进
 	result, err = executor.GoForward(ctx)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Navigation forward: %s\n", result.Message)
-	
+
 	// 刷新
 	result, err = executor.Reload(ctx)
 	if err != nil {
@@ -381,7 +386,7 @@ func ExampleAdvancedNavigation() error {
 // ExampleScrolling 示例：滚动操作
 func ExampleScrolling() error {
 	ctx := context.Background()
-	
+
 	browserMgr := browser.NewManager(nil, nil, nil)
 	if err := browserMgr.Start(ctx); err != nil {
 		return err
@@ -414,4 +419,3 @@ func ExampleScrolling() error {
 
 	return nil
 }
-
