@@ -27,7 +27,11 @@ import (
 // 导入全局工具结果存储
 var toolResultStore = localtools.GlobalToolResultStore
 
-const maxIterations = 4
+const (
+	maxIterationsSimple  = 3  // 简单任务的最大迭代次数
+	maxIterationsComplex = 12 // 复杂任务的最大迭代次数
+	maxIterationsEval    = 1  // 任务评估的最大迭代次数
+)
 
 // getStringFromMap 从 map 中安全地获取字符串值
 func getStringFromMap(m map[string]interface{}, key string) string {
@@ -129,8 +133,8 @@ func (t *MCPTool) Execute(ctx context.Context, input string) (string, error) {
 	// 为浏览器操作创建更长超时的 context（浏览器启动和导航需要更多时间）
 	// Executor 工具（browser_*）使用 120 秒超时，其他工具使用原有 context
 	execCtx := ctx
+	var cancel context.CancelFunc
 	if strings.HasPrefix(t.name, "browser_") {
-		var cancel context.CancelFunc
 		execCtx, cancel = context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		logger.Info(ctx, "Using extended timeout (120s) for browser tool: %s", t.name)
@@ -142,13 +146,52 @@ func (t *MCPTool) Execute(ctx context.Context, input string) (string, error) {
 		return "", fmt.Errorf("failed to call MCP tool: %w", err)
 	}
 
-	// 返回 JSON 格式的结果
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize result: %w", err)
+	// 处理返回结果，统一处理 data 字段
+	var responseText string
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		// 获取 message 字段作为主要响应
+		if message, ok := resultMap["message"].(string); ok {
+			responseText = message
+		}
+
+		// 检查并处理 data 字段
+		if data, ok := resultMap["data"].(map[string]interface{}); ok {
+			// 特殊处理 semantic_tree（直接追加文本）
+			if semanticTree, ok := data["semantic_tree"].(string); ok && semanticTree != "" {
+				responseText += "\n\n" + semanticTree
+				logger.Info(ctx, "Added semantic_tree to response for tool: %s (tree length: %d)", t.name, len(semanticTree))
+			} else {
+				// 其他数据类型（extract结果、page info等）序列化为 JSON
+				if len(data) > 0 {
+					dataJSON, err := json.MarshalIndent(data, "", "  ")
+					if err == nil {
+						responseText += "\n\nData:\n" + string(dataJSON)
+						logger.Info(ctx, "Added data to response for tool: %s (data keys: %v)", t.name, getMapKeys(data))
+					}
+				}
+			}
+		}
 	}
 
-	return string(resultJSON), nil
+	// 如果没有提取到文本响应，回退到 JSON 序列化
+	if responseText == "" {
+		resultJSON, err := json.Marshal(result)
+		if err != nil {
+			return "", fmt.Errorf("failed to serialize result: %w", err)
+		}
+		return string(resultJSON), nil
+	}
+
+	return responseText, nil
+}
+
+// getMapKeys 获取 map 的所有 key（辅助函数，用于日志）
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // Run implements interfaces.Tool.Run
@@ -186,12 +229,19 @@ func (t *MCPTool) Parameters() map[string]interfaces.ParameterSpec {
 	return params
 }
 
+// AgentInstances 存储不同类型的 Agent 实例
+type AgentInstances struct {
+	SimpleAgent  *agent.Agent // 简单任务 Agent (maxIterations=3)
+	ComplexAgent *agent.Agent // 复杂任务 Agent (maxIterations=12)
+	EvalAgent    *agent.Agent // 任务评估 Agent (maxIterations=1)
+}
+
 // AgentManager Agent 管理器
 type AgentManager struct {
 	db               *storage.BoltDB
 	mcpServer        browsermcp.IMCPServer
 	sessions         map[string]*ChatSession
-	agents           map[string]*agent.Agent // sessionID -> Agent 实例
+	agents           map[string]*AgentInstances // sessionID -> Agent 实例集合
 	llmClient        interfaces.LLM
 	currentLLMConfig *models.LLMConfigModel // 当前使用的 LLM 配置
 	toolReg          *tools.Registry
@@ -209,7 +259,7 @@ func NewAgentManager(db *storage.BoltDB, mcpServer browsermcp.IMCPServer) (*Agen
 		db:        db,
 		mcpServer: mcpServer,
 		sessions:  make(map[string]*ChatSession),
-		agents:    make(map[string]*agent.Agent),
+		agents:    make(map[string]*AgentInstances),
 		toolReg:   tools.NewRegistry(),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -299,11 +349,11 @@ func (am *AgentManager) initMCPTools() error {
 
 		// 包装工具以添加 instructions 参数和捕获执行结果
 		wrappedTool := localtools.WrapTool(tool)
-		
+
 		// 注册到工具注册表
 		am.toolReg.Register(wrappedTool)
 		count++
-		
+
 		logger.Info(am.ctx, "Registered script MCP tool (wrapped): %s", script.MCPCommandName)
 	}
 
@@ -405,7 +455,7 @@ func (am *AgentManager) initExecutorTools() error {
 		// 注册到工具注册表
 		am.toolReg.Register(wrappedTool)
 		count++
-		
+
 		logger.Debug(am.ctx, "Registered executor tool (wrapped): %s", meta.Name)
 	}
 
@@ -582,25 +632,25 @@ func (am *AgentManager) loadSessionsFromDB() error {
 			toolCalls := make([]*ToolCall, 0, len(dbMsg.ToolCalls))
 			for _, tc := range dbMsg.ToolCalls {
 				toolCall := &ToolCall{
-					ToolName: getStringFromMap(tc, "tool_name"),
-					Status:   getStringFromMap(tc, "status"),
-					Message:  getStringFromMap(tc, "message"),
+					ToolName:     getStringFromMap(tc, "tool_name"),
+					Status:       getStringFromMap(tc, "status"),
+					Message:      getStringFromMap(tc, "message"),
 					Instructions: getStringFromMap(tc, "instructions"),
-					Result:  getStringFromMap(tc, "result"),
+					Result:       getStringFromMap(tc, "result"),
 				}
-				
+
 				// 加载 arguments
 				if args, ok := tc["arguments"].(map[string]interface{}); ok {
 					toolCall.Arguments = args
 				}
-				
+
 				// 加载 timestamp
 				if tsStr, ok := tc["timestamp"].(string); ok {
 					if ts, err := time.Parse(time.RFC3339, tsStr); err == nil {
 						toolCall.Timestamp = ts
 					}
 				}
-				
+
 				toolCalls = append(toolCalls, toolCall)
 			}
 
@@ -623,36 +673,73 @@ func (am *AgentManager) loadSessionsFromDB() error {
 
 		am.sessions[session.ID] = session
 
-		// 为会话创建 Agent 实例
+		// 为会话创建 Agent 实例集合
 		if am.llmClient != nil {
-			mem := memory.NewConversationBuffer()
-
-			// 获取LazyMCP配置
-			lazyMCPConfigs, err := am.GetLazyMCPConfigs()
+			agentInstances, err := am.createAgentInstances()
 			if err != nil {
-				logger.Warn(am.ctx, "Failed to get lazy MCP configs: %v", err)
-				lazyMCPConfigs = []agent.LazyMCPConfig{}
-			}
-
-			ag, err := agent.NewAgent(
-				agent.WithLLM(am.llmClient),
-				agent.WithMemory(mem),
-				agent.WithTools(am.toolReg.List()...),
-				agent.WithLazyMCPConfigs(lazyMCPConfigs),
-				agent.WithSystemPrompt(am.GetSystemPrompt()),
-				agent.WithRequirePlanApproval(false),
-				agent.WithMaxIterations(maxIterations), // 增加最大迭代次数
-				agent.WithLogger(NewAgentLogger()),
-			)
-			if err != nil {
-				logger.Warn(am.ctx, "Failed to create Agent for session %s: %v", session.ID, err)
+				logger.Warn(am.ctx, "Failed to create Agent instances for session %s: %v", session.ID, err)
 			} else {
-				am.agents[session.ID] = ag
+				am.agents[session.ID] = agentInstances
 			}
 		}
 	}
 
 	return nil
+}
+
+// createAgentInstance 创建指定 maxIterations 的 Agent 实例
+func (am *AgentManager) createAgentInstance(maxIter int) (*agent.Agent, error) {
+	mem := memory.NewConversationBuffer()
+
+	// 获取LazyMCP配置
+	lazyMCPConfigs, err := am.GetLazyMCPConfigs()
+	if err != nil {
+		logger.Warn(am.ctx, "Failed to get lazy MCP configs: %v", err)
+		lazyMCPConfigs = []agent.LazyMCPConfig{}
+	}
+
+	ag, err := agent.NewAgent(
+		agent.WithLLM(am.llmClient),
+		agent.WithMemory(mem),
+		agent.WithTools(am.toolReg.List()...),
+		agent.WithLazyMCPConfigs(lazyMCPConfigs),
+		agent.WithSystemPrompt(am.GetSystemPrompt()),
+		agent.WithRequirePlanApproval(false),
+		agent.WithMaxIterations(maxIter),
+		agent.WithLogger(NewAgentLogger()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ag, nil
+}
+
+// createAgentInstances 为会话创建所有类型的 Agent 实例
+func (am *AgentManager) createAgentInstances() (*AgentInstances, error) {
+	// 创建简单任务 Agent
+	simpleAgent, err := am.createAgentInstance(maxIterationsSimple)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create simple agent: %w", err)
+	}
+
+	// 创建复杂任务 Agent
+	complexAgent, err := am.createAgentInstance(maxIterationsComplex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create complex agent: %w", err)
+	}
+
+	// 创建任务评估 Agent
+	evalAgent, err := am.createAgentInstance(maxIterationsEval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create eval agent: %w", err)
+	}
+
+	return &AgentInstances{
+		SimpleAgent:  simpleAgent,
+		ComplexAgent: complexAgent,
+		EvalAgent:    evalAgent,
+	}, nil
 }
 
 // CreateSession 创建新会话
@@ -679,40 +766,16 @@ func (am *AgentManager) CreateSession() *ChatSession {
 		logger.Warn(am.ctx, "Failed to save session to database: %v", err)
 	}
 
-	// 为新会话创建 Agent 实例
+	// 为新会话创建 Agent 实例集合
 	if am.llmClient != nil {
-		// 创建会话内存
-		mem := memory.NewConversationBuffer()
-
-		// 获取工具列表
-		tools := am.toolReg.List()
-
-		// 获取LazyMCP配置
-		lazyMCPConfigs, err := am.GetLazyMCPConfigs()
+		agentInstances, err := am.createAgentInstances()
 		if err != nil {
-			logger.Warn(am.ctx, "Failed to get lazy MCP configs: %v", err)
-			lazyMCPConfigs = []agent.LazyMCPConfig{}
-		}
-
-		// 创建 Agent - 禁用执行计划审批
-		ag, err := agent.NewAgent(
-			agent.WithLLM(am.llmClient),
-			agent.WithMemory(mem),
-			agent.WithTools(tools...),
-			agent.WithLazyMCPConfigs(lazyMCPConfigs),
-			agent.WithSystemPrompt(am.GetSystemPrompt()),
-			agent.WithRequirePlanApproval(false),   // 禁用执行计划审批
-			agent.WithMaxIterations(maxIterations), // 增加最大迭代次数，避免过早触发 final call
-			agent.WithLogger(NewAgentLogger()),
-		)
-		if err != nil {
-			logger.Warn(am.ctx, "Failed to create Agent for session %s: %v", session.ID, err)
+			logger.Warn(am.ctx, "Failed to create Agent instances for session %s: %v", session.ID, err)
 		} else {
-			am.agents[session.ID] = ag
-			logger.Info(am.ctx, "✓ Created Agent for session %s, tools count: %d, lazy MCP services: %d", session.ID, len(tools), len(lazyMCPConfigs))
-			for _, tool := range tools {
-				logger.Debug(am.ctx, "  - %s: %s", tool.Name(), tool.Description())
-			}
+			am.agents[session.ID] = agentInstances
+			tools := am.toolReg.List()
+			logger.Info(am.ctx, "✓ Created Agent instances for session %s (simple: %d, complex: %d, eval: %d), tools count: %d",
+				session.ID, maxIterationsSimple, maxIterationsComplex, maxIterationsEval, len(tools))
 		}
 	}
 
@@ -730,6 +793,133 @@ func (am *AgentManager) GetSession(sessionID string) (*ChatSession, error) {
 	}
 
 	return session, nil
+}
+
+// TaskComplexity 任务复杂度评估结果
+type TaskComplexity struct {
+	IsComplex   bool   `json:"is_complex"`  // true: 复杂任务, false: 简单任务
+	Reasoning   string `json:"reasoning"`   // 评估理由
+	Confidence  string `json:"confidence"`  // 置信度: high, medium, low
+	Explanation string `json:"explanation"` // 对用户的解释
+}
+
+// generateGreeting 生成友好的开场白回复
+func (am *AgentManager) generateGreeting(ctx context.Context, sessionID, userMessage string) (string, error) {
+	am.mu.RLock()
+	agentInstances, ok := am.agents[sessionID]
+	am.mu.RUnlock()
+
+	if !ok || agentInstances == nil || agentInstances.EvalAgent == nil {
+		// 如果 Agent 不可用，返回默认的开场白
+		return "Got it, let me help you with that.", nil
+	}
+
+	// 构建生成开场白的提示词
+	greetingPrompt := fmt.Sprintf(`Generate a brief, friendly greeting response for the user's request. The greeting should:
+1. Acknowledge their request
+2. Show understanding of what they want
+3. Be warm and professional
+4. Be brief (1-2 sentences max)
+5. Indicate you're about to help them
+6. IMPORTANT: Respond in the SAME LANGUAGE as the user's request
+
+User request: "%s"
+
+Examples of good greetings (match the language):
+- For Chinese: "收到，我将帮您查询今天的GitHub热门项目。"
+- For Chinese: "好的，让我来分析这个网站的性能数据。"
+- For English: "Got it, I'll help you find today's trending GitHub projects."
+- For English: "Sure, let me analyze the website performance data for you."
+
+Generate ONLY the greeting text (no JSON, no explanation), and respond in the same language as the user's request.`, userMessage)
+
+	// 创建评估上下文
+	greetingCtx := multitenancy.WithOrgID(ctx, "browserwing")
+	greetingCtx = context.WithValue(greetingCtx, memory.ConversationIDKey, sessionID+"_greeting")
+
+	// 使用评估 Agent 生成开场白
+	greeting, err := agentInstances.EvalAgent.Run(greetingCtx, greetingPrompt)
+	if err != nil {
+		logger.Warn(ctx, "[Greeting] Failed to generate greeting: %v, using default", err)
+		return "Got it, let me help you with that.", nil
+	}
+
+	// 清理可能的多余空白和换行
+	greeting = strings.TrimSpace(greeting)
+
+	logger.Info(ctx, "[Greeting] Generated greeting: %s", greeting)
+
+	return greeting, nil
+}
+
+// evaluateTaskComplexity 评估任务复杂度
+func (am *AgentManager) evaluateTaskComplexity(ctx context.Context, sessionID, userMessage string) (*TaskComplexity, error) {
+	am.mu.RLock()
+	agentInstances, ok := am.agents[sessionID]
+	am.mu.RUnlock()
+
+	if !ok || agentInstances == nil || agentInstances.EvalAgent == nil {
+		return nil, fmt.Errorf("eval agent for session %s is not initialized", sessionID)
+	}
+
+	// 构建评估提示词
+	evalPrompt := fmt.Sprintf(`Analyze the following user request and determine if it is a SIMPLE task or a COMPLEX task.
+
+User request: "%s"
+
+Guidelines:
+- SIMPLE tasks: Single step, straightforward queries, information lookup, simple calculations, basic tool usage (1-3 tool calls)
+  Examples: "What's the weather?", "Search for X", "Get trending repositories", "Calculate X+Y"
+
+- COMPLEX tasks: Multi-step workflows, data processing pipelines, tasks requiring multiple tool calls and coordination (4+ tool calls)
+  Examples: "Analyze website performance and create a report", "Compare multiple data sources and summarize", "Set up automated workflow"
+
+Response format (JSON only, no explanation):
+{
+  "is_complex": true/false,
+  "reasoning": "Brief explanation of why this is simple/complex",
+  "confidence": "high/medium/low",
+  "explanation": "Short user-friendly explanation in Chinese"
+}`, userMessage)
+
+	// 创建评估上下文
+	evalCtx := multitenancy.WithOrgID(ctx, "browserwing")
+	evalCtx = context.WithValue(evalCtx, memory.ConversationIDKey, sessionID+"_eval")
+
+	logger.Info(ctx, "[TaskEval] Evaluating task complexity for message: %s", userMessage)
+
+	// 使用评估 Agent
+	response, err := agentInstances.EvalAgent.Run(evalCtx, evalPrompt)
+	if err != nil {
+		logger.Warn(ctx, "[TaskEval] Failed to evaluate task complexity: %v, defaulting to simple", err)
+		return &TaskComplexity{
+			IsComplex:   false,
+			Reasoning:   "Evaluation failed, defaulting to simple task",
+			Confidence:  "low",
+			Explanation: "无法评估任务复杂度，使用简单模式",
+		}, nil
+	}
+
+	logger.Info(ctx, "[TaskEval] Raw response: %s", response)
+
+	// 解析 JSON 响应
+	var complexity TaskComplexity
+	if err := json.Unmarshal([]byte(response), &complexity); err != nil {
+		logger.Warn(ctx, "[TaskEval] Failed to parse JSON response: %v, defaulting to simple", err)
+		return &TaskComplexity{
+			IsComplex:   false,
+			Reasoning:   "Failed to parse evaluation result",
+			Confidence:  "low",
+			Explanation: "评估结果解析失败，使用简单模式",
+		}, nil
+	}
+
+	logger.Info(ctx, "[TaskEval] Task evaluated as %s (confidence: %s): %s",
+		map[bool]string{true: "COMPLEX", false: "SIMPLE"}[complexity.IsComplex],
+		complexity.Confidence,
+		complexity.Reasoning)
+
+	return &complexity, nil
 }
 
 // SendMessage 发送消息 (流式)
@@ -780,26 +970,109 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 		logger.Warn(am.ctx, "Failed to save user message to database: %v", err)
 	}
 
-	// 获取 Agent 实例
+	// 获取 Agent 实例集合
 	am.mu.RLock()
-	ag, ok := am.agents[sessionID]
+	agentInstances, ok := am.agents[sessionID]
 	am.mu.RUnlock()
 
-	if !ok {
+	if !ok || agentInstances == nil {
 		streamChan <- StreamChunk{
 			Type:  "error",
-			Error: fmt.Sprintf("Agent for session %s is not initialized", sessionID),
+			Error: fmt.Sprintf("Agent instances for session %s are not initialized", sessionID),
 		}
-		return fmt.Errorf("agent for session %s is not initialized", sessionID)
+		return fmt.Errorf("agent instances for session %s are not initialized", sessionID)
 	}
 
-	// 创建助手消息
+	// 立即生成并发送友好的开场白，让用户不要等待（作为独立消息）
+	greeting, err := am.generateGreeting(ctx, sessionID, userMessage)
+	if err != nil {
+		logger.Warn(ctx, "Failed to generate greeting: %v", err)
+		greeting = "Got it, let me help you with that."
+	}
+
+	// 创建并发送 greeting 消息（独立的消息）
+	greetingMsg := ChatMessage{
+		ID:        uuid.New().String(),
+		Role:      "assistant",
+		Content:   greeting,
+		Timestamp: time.Now(),
+		ToolCalls: []*ToolCall{},
+	}
+
+	// 流式发送 greeting
+	streamChan <- StreamChunk{
+		Type:      "message",
+		Content:   greeting,
+		MessageID: greetingMsg.ID,
+	}
+	streamChan <- StreamChunk{
+		Type:      "done",
+		MessageID: greetingMsg.ID,
+	}
+
+	logger.Info(ctx, "[Greeting] Sent greeting to user: %s", greeting)
+
+	// 保存 greeting 消息
+	am.mu.Lock()
+	session.Messages = append(session.Messages, greetingMsg)
+	session.UpdatedAt = time.Now()
+	am.mu.Unlock()
+
+	dbGreetingMsg := &models.AgentMessage{
+		ID:        greetingMsg.ID,
+		SessionID: sessionID,
+		Role:      greetingMsg.Role,
+		Content:   greetingMsg.Content,
+		Timestamp: greetingMsg.Timestamp,
+	}
+	if err := am.db.SaveAgentMessage(dbGreetingMsg); err != nil {
+		logger.Warn(am.ctx, "Failed to save greeting message to database: %v", err)
+	}
+
+	// 创建主要的助手消息（用于工具调用和最终回复）
 	assistantMsg := ChatMessage{
 		ID:        uuid.New().String(),
 		Role:      "assistant",
 		Content:   "",
 		Timestamp: time.Now(),
 		ToolCalls: []*ToolCall{},
+	}
+
+	// 发送新的消息 ID
+	streamChan <- StreamChunk{
+		Type:      "message",
+		Content:   "",
+		MessageID: assistantMsg.ID,
+	}
+
+	// 评估任务复杂度（在后台进行）
+	complexity, err := am.evaluateTaskComplexity(ctx, sessionID, userMessage)
+	if err != nil {
+		logger.Warn(ctx, "Failed to evaluate task complexity: %v, using simple agent", err)
+		complexity = &TaskComplexity{
+			IsComplex:   false,
+			Reasoning:   "Evaluation error, defaulting to simple",
+			Confidence:  "low",
+			Explanation: "评估失败，使用简单模式",
+		}
+	}
+
+	// 根据评估结果选择合适的 Agent
+	var ag *agent.Agent
+	if complexity.IsComplex {
+		ag = agentInstances.ComplexAgent
+		logger.Info(ctx, "Using COMPLEX agent (max iterations: %d) for task: %s", maxIterationsComplex, complexity.Reasoning)
+	} else {
+		ag = agentInstances.SimpleAgent
+		logger.Info(ctx, "Using SIMPLE agent (max iterations: %d) for task: %s", maxIterationsSimple, complexity.Reasoning)
+	}
+
+	if ag == nil {
+		streamChan <- StreamChunk{
+			Type:  "error",
+			Error: fmt.Sprintf("Selected agent for session %s is not initialized", sessionID),
+		}
+		return fmt.Errorf("selected agent for session %s is not initialized", sessionID)
 	}
 
 	// 创建多租户上下文
@@ -814,13 +1087,6 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 			Error: err.Error(),
 		}
 		return err
-	}
-
-	// 发送消息 ID
-	streamChan <- StreamChunk{
-		Type:      "message",
-		Content:   "",
-		MessageID: assistantMsg.ID,
 	}
 
 	// 处理流式事件
@@ -862,9 +1128,9 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 				}
 
 				// 详细日志：查看事件的完整结构
-				logger.Info(ctx, "[ToolResult Event] Tool: %s, Status: %s, Result length: %d", 
+				logger.Info(ctx, "[ToolResult Event] Tool: %s, Status: %s, Result length: %d",
 					tc.Name, tc.Status, len(tc.Result))
-				logger.Info(ctx, "[ToolResult Event] ToolCall details - ID: %s, Arguments: %s, Result: %s", 
+				logger.Info(ctx, "[ToolResult Event] ToolCall details - ID: %s, Arguments: %s, Result: %s",
 					tc.ID, tc.Arguments, tc.Result)
 				logger.Info(ctx, "[ToolResult Event] Event.Content: %s", event.Content)
 				if event.Metadata != nil {
@@ -903,7 +1169,7 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 					// 保存执行结果
 					if resultData != "" {
 						toolCall.Result = resultData
-						logger.Info(ctx, "[ToolResult Event] Saved result (first 200 chars): %s", 
+						logger.Info(ctx, "[ToolResult Event] Saved result (first 200 chars): %s",
 							resultData[:min(200, len(resultData))])
 					} else {
 						logger.Warn(ctx, "[ToolResult Event] Result is empty!")
@@ -941,16 +1207,16 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 						Timestamp: time.Now(),
 						Arguments: make(map[string]interface{}),
 					}
-					
+
 					logger.Info(ctx, "[ToolCall Event] Tool: %s, Arguments JSON: %s", tc.Name, tc.Arguments)
-					
+
 					// 提取 instructions 和其他参数
 					if tc.Arguments != "" {
 						// 解析参数 JSON
 						var args map[string]interface{}
 						if err := json.Unmarshal([]byte(tc.Arguments), &args); err == nil {
 							logger.Info(ctx, "[ToolCall Event] Parsed args: %+v", args)
-							
+
 							// 提取 instructions
 							if instructions, ok := args["instructions"].(string); ok {
 								toolCall.Instructions = instructions
@@ -961,7 +1227,7 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 								logger.Warn(ctx, "[ToolCall Event] No instructions found in args")
 							}
 							toolCall.Arguments = args
-							logger.Info(ctx, "[ToolCall Event] Final toolCall - Instructions: %s, Args: %+v", 
+							logger.Info(ctx, "[ToolCall Event] Final toolCall - Instructions: %s, Args: %+v",
 								toolCall.Instructions, toolCall.Arguments)
 						} else {
 							logger.Error(ctx, "[ToolCall Event] Failed to parse arguments JSON: %v", err)
@@ -969,7 +1235,7 @@ func (am *AgentManager) SendMessage(ctx context.Context, sessionID, userMessage 
 					} else {
 						logger.Warn(ctx, "[ToolCall Event] Arguments is empty")
 					}
-					
+
 					toolCallMap[tc.Name] = toolCall
 					assistantMsg.ToolCalls = append(assistantMsg.ToolCalls, toolCall)
 				}
@@ -1003,9 +1269,9 @@ processingComplete:
 	// 保存助手消息到数据库
 	var toolCallsData []map[string]interface{}
 	for _, tc := range assistantMsg.ToolCalls {
-		logger.Info(ctx, "Saving tool call to DB: name=%s, status=%s, instructions=%s, args=%+v, result_len=%d", 
+		logger.Info(ctx, "Saving tool call to DB: name=%s, status=%s, instructions=%s, args=%+v, result_len=%d",
 			tc.ToolName, tc.Status, tc.Instructions, tc.Arguments, len(tc.Result))
-		
+
 		toolCallsData = append(toolCallsData, map[string]interface{}{
 			"tool_name":    tc.ToolName,
 			"status":       tc.Status,

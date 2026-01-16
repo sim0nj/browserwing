@@ -306,10 +306,36 @@ export default function AgentChat() {
             switch (chunk.type) {
               case 'message':
                 // 文本内容
-                if (chunk.message_id && !assistantMsg.id) {
-                  assistantMsg.id = chunk.message_id
+                // 如果收到新的 message_id，说明是新消息，需要创建新的消息对象
+                if (chunk.message_id && chunk.message_id !== assistantMsg.id) {
+                  // 如果已有消息ID且不同，创建新消息
+                  if (assistantMsg.id) {
+                    // 保存当前消息到会话中（如果还没保存的话）
+                    setCurrentSession(prev => {
+                      if (!prev) return prev
+                      const messages = [...prev.messages]
+                      const existingIndex = messages.findIndex(m => m.id === assistantMsg.id)
+                      if (existingIndex === -1) {
+                        messages.push({ ...assistantMsg })
+                      }
+                      return { ...prev, messages }
+                    })
+                  }
+                  // 创建新的消息对象
+                  assistantMsg = {
+                    id: chunk.message_id,
+                    role: 'assistant',
+                    content: chunk.content || '',
+                    timestamp: new Date().toISOString(),
+                    tool_calls: [],
+                  }
+                } else {
+                // 同一条消息，追加内容
+                  if (chunk.message_id && !assistantMsg.id) {
+                    assistantMsg.id = chunk.message_id
+                  }
+                  assistantMsg.content += chunk.content || ''
                 }
-                assistantMsg.content += chunk.content || ''
                 
                 // 更新界面
                 setCurrentSession(prev => {
@@ -357,7 +383,8 @@ export default function AgentChat() {
                     const messages = [...prev.messages]
                     const lastMsg = messages[messages.length - 1]
                     
-                    if (lastMsg?.role === 'assistant') {
+                    // 检查是否是同一条消息（通过 id 和 role）
+                    if (lastMsg?.role === 'assistant' && lastMsg.id === assistantMsg.id) {
                       messages[messages.length - 1] = { ...assistantMsg }
                     } else {
                       messages.push({ ...assistantMsg })
@@ -372,8 +399,8 @@ export default function AgentChat() {
                 break
 
               case 'done':
-                // 完成
-                setIsStreaming(false)
+                // 完成 - 单个消息完成，但不关闭整个流式状态
+                // 流式状态会在整个连接结束时关闭
                 break
 
               case 'error':
@@ -387,6 +414,9 @@ export default function AgentChat() {
           }
         }
       }
+
+      // 流式传输完成，关闭流式状态
+      setIsStreaming(false)
 
       // 重新加载会话以获取完整数据
       const sessionResponse = await fetch(`/api/v1/agent/sessions/${currentSession.id}`)
@@ -686,7 +716,7 @@ export default function AgentChat() {
                                     <div key={tc.tool_name}>
                                       {/* Instructions 显示在卡片上方 - 普通文字样式 */}
                                       {tc.instructions && (
-                                        <div className="mb-2 text-gray-900 dark:text-gray-100">
+                                        <div className="prose prose-sm dark:prose-invert max-w-none text-base">
                                           {tc.instructions}
                                         </div>
                                       )}
@@ -699,10 +729,20 @@ export default function AgentChat() {
 
                               {/* 消息内容 - 支持 Markdown 渲染 */}
                               {message.content ? (
-                                <MarkdownRenderer
-                                  content={message.content}
-                                  className="text-base"
-                                />
+                                <>
+                                  <MarkdownRenderer
+                                    content={message.content}
+                                    className="text-base"
+                                  />
+                                  {/* 如果正在流式传输，显示思考中的指示 */}
+                                  {isStreaming && message.id === currentSession.messages[currentSession.messages.length - 1]?.id && (
+                                    <div className="flex items-center gap-1.5 mt-2">
+                                      <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></span>
+                                      <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.4s' }}></span>
+                                      <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.4s' }}></span>
+                                    </div>
+                                  )}
+                                </>
                               ) : isStreaming ? (
                                 <div className="flex items-center gap-1.5 py-3">
                                   <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></span>

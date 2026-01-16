@@ -500,10 +500,15 @@ func (s *MCPServer) callExecutorTool(ctx context.Context, name string, arguments
 		if err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
+		response := map[string]interface{}{
 			"success": result.Success,
 			"message": result.Message,
-		}, nil
+		}
+		// 如果有 Data 字段，包含它（特别是 semantic_tree）
+		if len(result.Data) > 0 {
+			response["data"] = result.Data
+		}
+		return response, nil
 
 	case "browser_click":
 		identifier, _ := arguments["identifier"].(string)
@@ -572,11 +577,14 @@ func (s *MCPServer) callExecutorTool(ctx context.Context, name string, arguments
 		if err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
+		response := map[string]interface{}{
 			"success": result.Success,
 			"message": result.Message,
-			"size":    result.Data["size"],
-		}, nil
+		}
+		if len(result.Data) > 0 {
+			response["data"] = result.Data
+		}
+		return response, nil
 
 	case "browser_extract":
 		selector, _ := arguments["selector"].(string)
@@ -596,11 +604,14 @@ func (s *MCPServer) callExecutorTool(ctx context.Context, name string, arguments
 		if err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
+		response := map[string]interface{}{
 			"success": result.Success,
 			"message": result.Message,
-			"data":    result.Data["result"],
-		}, nil
+		}
+		if len(result.Data) > 0 {
+			response["data"] = result.Data
+		}
+		return response, nil
 
 	case "browser_get_semantic_tree":
 		simple := true
@@ -613,30 +624,36 @@ func (s *MCPServer) callExecutorTool(ctx context.Context, name string, arguments
 			return nil, err
 		}
 		
-		if simple {
-			return map[string]interface{}{
-				"success": true,
-				"message": "Successfully retrieved semantic tree",
-				"tree":    tree.SerializeToSimpleText(),
-			}, nil
-		}
-		
-		return map[string]interface{}{
+		response := map[string]interface{}{
 			"success": true,
 			"message": "Successfully retrieved semantic tree",
-			"tree":    tree,
-		}, nil
+		}
+		
+		if simple {
+			response["data"] = map[string]interface{}{
+				"semantic_tree": tree.SerializeToSimpleText(),
+			}
+		} else {
+			response["data"] = map[string]interface{}{
+				"semantic_tree": tree,
+			}
+		}
+		
+		return response, nil
 
 	case "browser_get_page_info":
 		result, err := s.executor.GetPageInfo(ctx)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]interface{}{
+		response := map[string]interface{}{
 			"success": result.Success,
 			"message": result.Message,
-			"info":    result.Data,
-		}, nil
+		}
+		if len(result.Data) > 0 {
+			response["data"] = result.Data
+		}
+		return response, nil
 
 	case "browser_wait_for":
 		identifier, _ := arguments["identifier"].(string)
