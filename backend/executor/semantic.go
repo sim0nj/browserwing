@@ -109,6 +109,14 @@ func ExtractSemanticTree(ctx context.Context, page *rod.Page) (*SemanticTree, er
 	}
 	logger.Info(ctx, "[ExtractSemanticTree] Converted %d nodes to %d semantic nodes", len(axTree.Nodes), nodeCount)
 
+	// 检查 cursor: pointer 元素并标记为可点击
+	logger.Info(ctx, "[ExtractSemanticTree] Checking cursor:pointer elements...")
+	err = markCursorPointerElements(ctx, page, tree)
+	if err != nil {
+		logger.Warn(ctx, "[ExtractSemanticTree] Failed to mark cursor:pointer elements: %v", err)
+		// 不返回错误，继续处理
+	}
+
 	// 构建根节点
 	if len(axTree.Nodes) > 0 {
 		tree.Root = tree.Elements[string(axTree.Nodes[0].NodeID)]
@@ -299,7 +307,97 @@ func (tree *SemanticTree) GetVisibleElements() []*SemanticNode {
 	return result
 }
 
-// GetClickableElements 获取所有可点击元素（基于 Accessibility Role）
+// markCursorPointerElements 标记所有 cursor:pointer 的元素为可点击
+func markCursorPointerElements(ctx context.Context, page *rod.Page, tree *SemanticTree) error {
+	// 执行 JavaScript 获取所有 cursor:pointer 元素的信息
+	script := `
+	() => {
+		const elements = [];
+		const allElements = document.querySelectorAll('*');
+		
+		for (const elem of allElements) {
+			const style = window.getComputedStyle(elem);
+			if (style.cursor === 'pointer') {
+				// 获取元素的文本内容（截断到合理长度）
+				let text = elem.textContent || '';
+				text = text.trim().substring(0, 100);
+				
+				// 获取元素的标识信息
+				const id = elem.id || '';
+				const className = elem.className || '';
+				const tagName = elem.tagName.toLowerCase();
+				
+				elements.push({
+					text: text,
+					id: id,
+					className: typeof className === 'string' ? className : '',
+					tagName: tagName
+				});
+			}
+		}
+		
+		return elements;
+	}
+	`
+
+	result, err := page.Eval(script)
+	if err != nil {
+		return fmt.Errorf("failed to execute cursor pointer detection script: %w", err)
+	}
+
+	// 解析结果
+	var cursorPointerElements []map[string]interface{}
+	if err := result.Value.Unmarshal(&cursorPointerElements); err != nil {
+		return fmt.Errorf("failed to unmarshal cursor pointer elements: %w", err)
+	}
+
+	logger.Info(ctx, "[markCursorPointerElements] Found %d elements with cursor:pointer", len(cursorPointerElements))
+
+	// 标记树中的节点
+	markedCount := 0
+	for _, elem := range cursorPointerElements {
+		text, _ := elem["text"].(string)
+		id, _ := elem["id"].(string)
+		className, _ := elem["className"].(string)
+		tagName, _ := elem["tagName"].(string)
+
+		// 尝试在语义树中找到匹配的节点
+		for _, node := range tree.Elements {
+			// 跳过已经被标记为可点击的节点
+			if clickable, ok := node.Metadata["cursor_pointer"].(bool); ok && clickable {
+				continue
+			}
+
+			// 匹配逻辑：基于文本、ID、className
+			matched := false
+			if id != "" && node.Attributes["id"] == id {
+				matched = true
+			} else if text != "" && (strings.Contains(node.Text, text) || strings.Contains(text, node.Text)) {
+				// 文本匹配（允许部分匹配）
+				if len(text) > 5 && len(node.Text) > 5 { // 避免太短的文本误匹配
+					matched = true
+				}
+			} else if node.Label != "" && text != "" && strings.Contains(text, node.Label) {
+				matched = true
+			}
+
+			if matched {
+				// 标记为 cursor:pointer 元素
+				node.Metadata["cursor_pointer"] = true
+				node.Metadata["cursor_pointer_tag"] = tagName
+				if className != "" {
+					node.Metadata["cursor_pointer_class"] = className
+				}
+				markedCount++
+			}
+		}
+	}
+
+	logger.Info(ctx, "[markCursorPointerElements] Marked %d nodes as cursor:pointer", markedCount)
+	return nil
+}
+
+// GetClickableElements 获取所有可点击元素（基于 Accessibility Role 和 cursor:pointer）
 func (tree *SemanticTree) GetClickableElements() []*SemanticNode {
 	result := make([]*SemanticNode, 0)
 
@@ -327,12 +425,26 @@ func (tree *SemanticTree) GetClickableElements() []*SemanticNode {
 			continue
 		}
 
-		// 基于 Accessibility Role 判断
+		isClickable := false
+
+		// 1. 基于 Accessibility Role 判断
 		if clickableRoles[node.Role] {
 			// 至少要有名称或文本
 			if node.Label != "" || node.Text != "" || node.Description != "" {
-				result = append(result, node)
+				isClickable = true
 			}
+		}
+
+		// 2. 检查是否有 cursor:pointer 标记
+		if cursorPointer, ok := node.Metadata["cursor_pointer"].(bool); ok && cursorPointer {
+			// cursor:pointer 元素也应该有一定的标识（避免添加空元素）
+			if node.Label != "" || node.Text != "" || node.Description != "" || node.Attributes["id"] != "" {
+				isClickable = true
+			}
+		}
+
+		if isClickable {
+			result = append(result, node)
 		}
 	}
 
