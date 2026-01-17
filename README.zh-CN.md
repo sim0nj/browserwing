@@ -148,7 +148,12 @@ BrowserWing 提供 26+ 个 HTTP API 端点用于浏览器自动化：
 
 - Discord: [https://discord.gg/BkqcApRj](https://discord.gg/BkqcApRj)
 - twitter: [https://x.com/chg80333](https://x.com/chg80333)
+- QQ群：点击链接加入群聊[【Browserwing用户群】](https://qun.qq.com/universal-share/share?ac=1&authKey=Wk%2FnSWvWLNO8Cegxo1PFqUmF%2Bntymd9JFl1l1n0GCwpWjeR2Yo7K91PgnugnK8N9&busi_data=eyJncm91cENvZGUiOiIxMDc4MTQwMTU1IiwidG9rZW4iOiJPa1pLeTVqai9EV09DRUpFeHM3dWVwclU5NW5LRDNRaEJ0ZTVld2lMbmFOelgxZWhia2JpZHhsc2hYbmxWdW1RIiwidWluIjoiMzE3NTQyNTQ4MCJ9&data=HbgiLCOhCT4c68pCpyI0whItk4SppgqtsjnQMaiP_zUtfM1O62y6jUFBVH0moLnQ_1ucw9gilYKMuMNux9F-FQ&svctype=4&tempid=h5_group_info)
 - 加微信进交流群：mongorz（备注 browserwing）
+
+可以直接扫码加微信群：
+
+<img width="150" alt="BrowserWing" src="https://raw.githubusercontent.com/browserwing/browserwing/main/docs/assets/wechat_group.jpg">
 
 ## 致谢
 
