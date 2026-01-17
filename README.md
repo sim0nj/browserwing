@@ -51,12 +51,27 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
-### 🎯 Claude Skills Integration (New!)
+### Option B — Build from Source
+
+```bash
+# Install deps (Go + pnpm required)
+make install
+
+# Build integrated binary (frontend embedded)
+make build-embedded
+./build/browserwing --port 8080
+
+# Or build all targets and packages
+make build-all
+make package
+```
+
+## 🎯 Claude Skills Integration (New!)
 
 **Use BrowserWing directly with Claude:**
 
 1. Start BrowserWing (see above)
-2. Import `SKILL.md` into Claude Desktop:
+2. Import [SKILL.md](https://raw.githubusercontent.com/browserwing/browserwing/refs/heads/main/SKILL.md) into Claude Desktop:
    - Open Claude Desktop → Settings → Skills
    - Add Skill → Select `SKILL.md` from the repository root
    - Enable the skill
@@ -77,21 +92,6 @@ curl -X POST 'http://localhost:8080/api/v1/scripts/export/skill' \
   -o MY_SCRIPTS_SKILL.md
 
 # Import into Claude and use your custom automation scripts!
-```
-
-### Option B — Build from Source
-
-```bash
-# Install deps (Go + pnpm required)
-make install
-
-# Build integrated binary (frontend embedded)
-make build-embedded
-./build/browserwing --port 8080
-
-# Or build all targets and packages
-make build-all
-make package
 ```
 
 ## Why BrowserWing

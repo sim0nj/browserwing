@@ -40,12 +40,27 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
-### 🎯 Claude Skills 集成（新功能！）
+### 方式 B — 源码构建
+
+```bash
+# 安装依赖（需要 Go 与 pnpm）
+make install
+
+# 构建集成版本（前端嵌入后端）
+make build-embedded
+./build/browserwing --port 8080
+
+# 或构建全部目标并打包
+make build-all
+make package
+```
+
+## 🎯 Claude Skills 集成（新功能！）
 
 **直接在 Claude 中使用 BrowserWing：**
 
 1. 启动 BrowserWing（见上方）
-2. 将 `SKILL.md` 导入 Claude Desktop：
+2. 将 [SKILL.md](https://raw.githubusercontent.com/browserwing/browserwing/refs/heads/main/SKILL.md) 导入 Claude Desktop：
    - 打开 Claude Desktop → 设置 → Skills
    - 添加 Skill → 选择仓库根目录的 `SKILL.md`
    - 启用该技能
@@ -66,21 +81,6 @@ curl -X POST 'http://localhost:8080/api/v1/scripts/export/skill' \
   -o MY_SCRIPTS_SKILL.md
 
 # 导入 Claude 后即可使用你的自定义自动化脚本！
-```
-
-### 方式 B — 源码构建
-
-```bash
-# 安装依赖（需要 Go 与 pnpm）
-make install
-
-# 构建集成版本（前端嵌入后端）
-make build-embedded
-./build/browserwing --port 8080
-
-# 或构建全部目标并打包
-make build-all
-make package
 ```
 
 ## 🤖 为什么选择 BrowserWing
