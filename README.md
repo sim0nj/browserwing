@@ -39,10 +39,33 @@ https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
 
 ## Quick Start
 
-### Option A — Download Release (recommended)
+### Option A — One-Line Install (recommended)
 
-- Download the prebuilt binary for your OS from [Releases](https://github.com/browserwing/browserwing/releases).
-- Run the app and open `http://localhost:8080`.
+**Linux / macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/browserwing/browserwing/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/browserwing/browserwing/main/install.ps1 | iex
+```
+
+The installation script will:
+- Automatically detect your OS and architecture
+- Download the latest release from GitHub
+- Install to `~/.browserwing/` (or `%USERPROFILE%\.browserwing` on Windows)
+- Add to PATH and make executable
+
+**Then start BrowserWing:**
+```bash
+browserwing --port 8080
+# Open http://localhost:8080 in your browser
+```
+
+### Option B — Manual Download
+
+Download the prebuilt binary for your OS from [Releases](https://github.com/browserwing/browserwing/releases):
 
 ```bash
 # Linux/macOS
@@ -53,7 +76,7 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
-### Option B — Build from Source
+### Option C — Build from Source
 
 ```bash
 # Install deps (Go + pnpm required)
