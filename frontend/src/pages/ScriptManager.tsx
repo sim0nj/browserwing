@@ -25,7 +25,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 export default function ScriptManager() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   // 标签页状态
   const [activeTab, setActiveTab] = useState<'scripts' | 'executions'>('scripts')
@@ -1285,6 +1285,15 @@ export default function ScriptManager() {
                 <HelpCircle className="w-5 h-5" />
                 <span>{t('script.tutorial.title')}</span>
               </button>
+              <a
+                href={language.startsWith('zh-') ? 'https://browserwing.com/zh/scripts' : 'https://browserwing.com/scripts'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary flex items-center space-x-2"
+              >
+                <ExternalLink className="w-5 h-5" />
+                <span>{t('script.marketplace')}</span>
+              </a>
             </div>
           )}
           {activeTab === 'executions' && (

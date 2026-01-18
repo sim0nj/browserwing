@@ -100,7 +100,7 @@ export default function Layout() {
       </div>
 
       {/* Header - Notion风格 */}
-      <header className="sticky top-0 bg-white/70 dark:bg-gray-900/70 border-b border-gray-200/60 dark:border-gray-700/60" style={{ zIndex: 50, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+      <header className="sticky top-0 bg-white/70 dark:bg-gray-900/70 border-b border-gray-200/60 dark:border-gray-700/60" style={{ zIndex: 50, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', fontFamily: 'Space Grotesk, Noto Sans SC, PingFang SC, Microsoft YaHei, system-ui, -apple-system, sans-serif' }}>
         <div className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-6 lg:px-10 xl:px-12">
           <div className="flex items-center justify-between h-16 lg:h-18">
             <Link to="/" className="flex items-center space-x-3 group">
