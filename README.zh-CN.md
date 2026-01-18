@@ -26,7 +26,27 @@
 
 ## 快速开始
 
-### 方式 A — 一键安装（推荐）
+### 方式 A — 通过包管理器安装（推荐）
+
+**使用 npm：**
+```bash
+npm install -g browserwing
+browserwing --port 8080
+```
+
+**使用 pnpm：**
+```bash
+pnpm add -g browserwing
+browserwing --port 8080
+```
+
+**使用 Homebrew (macOS/Linux)：**
+```bash
+# 即将支持
+brew install browserwing
+```
+
+### 方式 B — 一键安装脚本
 
 **Linux / macOS：**
 ```bash
@@ -38,11 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/browserwing/browserwing/main/instal
 iwr -useb https://raw.githubusercontent.com/browserwing/browserwing/main/install.ps1 | iex
 ```
 
-安装脚本将会：
-- 自动检测操作系统和架构
-- 从 GitHub Releases 下载最新二进制文件
-- 安装到 `~/.browserwing/`（Windows 为 `%USERPROFILE%\.browserwing`）
-- 添加到系统 PATH 并设置可执行权限
+脚本将自动检测系统和架构，下载二进制文件并添加到 PATH。
 
 **然后启动 BrowserWing：**
 ```bash
@@ -50,7 +66,7 @@ browserwing --port 8080
 # 在浏览器中打开 http://localhost:8080
 ```
 
-### 方式 B — 手动下载
+### 方式 C — 手动下载
 
 从 [Releases](https://github.com/browserwing/browserwing/releases) 下载对应操作系统的预构建二进制文件：
 
@@ -65,7 +81,7 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
-### 方式 C — 源码构建
+### 方式 D — 源码构建
 
 ```bash
 # 安装依赖（需要 Go 与 pnpm）

@@ -39,7 +39,27 @@ https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
 
 ## Quick Start
 
-### Option A — One-Line Install (recommended)
+### Option A — Install via Package Manager (recommended)
+
+**Using npm:**
+```bash
+npm install -g browserwing
+browserwing --port 8080
+```
+
+**Using pnpm:**
+```bash
+pnpm add -g browserwing
+browserwing --port 8080
+```
+
+**Using Homebrew (macOS/Linux):**
+```bash
+# Coming soon
+brew install browserwing
+```
+
+### Option B — One-Line Install Script
 
 **Linux / macOS:**
 ```bash
@@ -51,11 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/browserwing/browserwing/main/instal
 iwr -useb https://raw.githubusercontent.com/browserwing/browserwing/main/install.ps1 | iex
 ```
 
-The installation script will:
-- Automatically detect your OS and architecture
-- Download the latest binary from GitHub Releases
-- Install to `~/.browserwing/` (or `%USERPROFILE%\.browserwing` on Windows)
-- Add to system PATH and set executable permissions
+The script automatically detects your OS/architecture, downloads the binary, and adds to PATH.
 
 **Then start BrowserWing:**
 ```bash
@@ -63,7 +79,7 @@ browserwing --port 8080
 # Open http://localhost:8080 in your browser
 ```
 
-### Option B — Manual Download
+### Option C — Manual Download
 
 Download the prebuilt binary for your OS from [Releases](https://github.com/browserwing/browserwing/releases):
 
@@ -76,7 +92,7 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
-### Option C — Build from Source
+### Option D — Build from Source
 
 ```bash
 # Install deps (Go + pnpm required)
