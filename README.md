@@ -23,13 +23,15 @@ https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
 
 ## Highlights
 
-- **🎯 Claude Skills Integration**: Install and use `SKILL.md` directly as a Claude Skill
-- **📝 Script to Skill Export**: Convert your recorded scripts to `SKILL.md` format for Claude
-- **🚀 Complete Executor API**: 26 HTTP endpoints for browser automation with full Claude Skills support
-- Browser management: launch, control, and persist sessions with cookies
-- Script recording: capture clicks, inputs, navigations, and edit visually
-- MCP integration: convert scripts to Model Context Protocol commands
-- LLM support: configure OpenAI, Claude, DeepSeek and more for extraction
+**Native Browser Automation Platform with AI Integration**
+
+- **Complete Browser Control**: 26+ HTTP API endpoints for full-featured browser automation
+- **Built-in AI Agent**: Direct conversational interface for browser automation tasks
+- **Universal AI Tool Integration**: Native MCP & Skills protocol support - compatible with any AI tool that supports these standards
+- **Visual Script Recording**: Record browser actions, edit visually, and replay with precision
+- **Flexible Export Options**: Convert recorded scripts to MCP commands or Skills files for AI tool integration
+- **Intelligent Data Extraction**: LLM-powered semantic extraction supporting OpenAI, Claude, DeepSeek, and more
+- **Session Management**: Robust cookie and storage handling for stable, authenticated browsing sessions
 
 ## Requirements
 
@@ -66,89 +68,137 @@ make build-all
 make package
 ```
 
-## 🎯 Claude Skills Integration (New!)
+## Quick Integration with AI Tools
 
-**Use BrowserWing directly with Claude:**
+**Three Ways to Use BrowserWing:**
 
-1. Start BrowserWing (see above)
-2. Import [SKILL.md](https://raw.githubusercontent.com/browserwing/browserwing/refs/heads/main/SKILL.md) into Claude Desktop:
-   - Open Claude Desktop → Settings → Skills
-   - Add Skill → Select `SKILL.md` from the repository root
-   - Enable the skill
-3. Start automating! Claude can now control your browser through natural language
+### 1. MCP Server Integration
+
+Configure BrowserWing as an MCP server in any MCP-compatible AI tool:
+
+```json
+{
+  "mcpServers": {
+    "browserwing": {
+      "url": "http://localhost:8080/api/v1/mcp/message"
+    }
+  }
+}
+```
+
+Paste this configuration into your AI tool's MCP settings to enable browser automation capabilities.
+
+### 2. Skills File Integration
+
+Download and import the Skills file into any AI tool that supports the Skills protocol:
+
+1. Start BrowserWing
+2. Download [SKILL.md](https://raw.githubusercontent.com/browserwing/browserwing/refs/heads/main/SKILL.md) from the repository
+3. Import into your AI tool's Skills settings
+4. Start automating with natural language commands
 
 **Example:**
 ```
-You: "Search for 'AI tools' on example.com and extract the top 5 results"
-Claude: [Uses BrowserWing API to navigate, interact, and extract data]
+"Navigate to example.com, search for 'AI tools', and extract the top 5 results"
 ```
 
-**Export your recorded scripts as Skills:**
+### 3. Direct AI Agent Interface
+
+Use BrowserWing's built-in AI Agent for immediate browser automation:
+
+1. Open BrowserWing web interface at `http://localhost:8080`
+2. Navigate to "AI Agent" section
+3. Configure your LLM (OpenAI, Claude, DeepSeek, etc.)
+4. Start conversational browser automation
+
+**Export Custom Scripts:**
 ```bash
-# Export all scripts
+# Export your recorded scripts as Skills or MCP commands
 curl -X POST 'http://localhost:8080/api/v1/scripts/export/skill' \
   -H 'Content-Type: application/json' \
   -d '{"script_ids": []}' \
-  -o MY_SCRIPTS_SKILL.md
-
-# Import into Claude and use your custom automation scripts!
+  -o MY_CUSTOM_SCRIPTS.md
 ```
 
 ## Why BrowserWing
 
-- **🎯 Native Claude Skills Support**: Works out-of-the-box with Claude Desktop (like playwright-mcp)
-- **📝 Script Export to Skills**: Turn your recorded automation into reusable Claude Skills
-- **🚀 26+ API Endpoints**: Complete HTTP API for programmatic browser control
-- Active ecosystem and rich scripts help you finish tasks fast
-- Token-efficient design with fast performance
-- Automates complex web tasks with reliable, replayable scripts
-- Bridges recorded actions with LLM workflows via MCP commands and Claude Skills
-- Keeps sessions stable with cookie and storage management
-- Designed for data extraction, RPA, testing, and agent-driven browsing
+**Professional Browser Automation with AI Integration**
 
-## Architecture
-
-```mermaid
-flowchart LR
-  User((You))
-  Frontend[React + Vite]
-  Backend[Go API]
-  Browser[Recorder / Player / Manager]
-  MCP[MCP Server]
-  LLMs[OpenAI, Claude, DeepSeek, etc.]
-
-  User --> Frontend
-  Frontend --> Backend
-  Backend --> Browser
-  Backend --> MCP
-  MCP --> LLMs
-```
+- **Universal Protocol Support**: Native MCP & Skills implementation works with any compatible AI tool
+- **Complete Automation API**: 26+ HTTP endpoints providing comprehensive browser control capabilities
+- **Flexible Integration Options**: Use as MCP server, Skills file, or standalone AI Agent
+- **Visual Workflow Builder**: Record, edit, and replay browser actions without writing code
+- **Token-Efficient Design**: Optimized for LLM usage with fast performance and minimal token consumption
+- **Production-Ready**: Stable session management, cookie handling, and error recovery
+- **Extensible Architecture**: Convert recorded scripts to reusable MCP commands or Skills files
+- **Multi-LLM Support**: Works with OpenAI, Anthropic, DeepSeek, and other providers
+- **Enterprise Use Cases**: Data extraction, RPA, testing, monitoring, and agent-driven automation
 
 ## Usage Guide
 
-### For Claude Skills Users (Recommended)
+### Getting Started in Three Steps
 
-1. **Install Skill**: Import `SKILL.md` into Claude Desktop
-2. **Start automating**: Ask Claude to automate web tasks in natural language
-3. **Export custom scripts**: Convert your recorded scripts to Skills for reusable automation
+1. **Choose Integration Method**
+   - Copy MCP server configuration for AI tool integration
+   - Download Skills file for Skills-compatible AI tools
+   - Or use built-in AI Agent for immediate access
 
-### For Advanced Users
+2. **Configure Your AI Tool**
+   - Import MCP configuration or Skills file into your preferred AI tool
+   - Configure LLM settings (API keys, model selection)
+   - Verify connection to BrowserWing
 
-1. Manage browsers: start instances, configure profiles, handle cookies
-2. Record scripts: capture steps and save for replay/editing
-3. Convert to MCP/Skills: expose scripts as MCP tools or Claude Skills
-4. Call with LLMs: let models orchestrate browser automation via MCP or HTTP API
+3. **Start Automating**
+   - Control browser through natural language commands
+   - Record custom scripts for repeated tasks
+   - Export scripts as MCP commands or Skills for reuse
 
-### API Endpoints
+### Advanced Workflows
 
-BrowserWing provides 26+ HTTP API endpoints for browser automation:
-- Page navigation and control
-- Element interaction (click, type, select)
-- Data extraction and semantic analysis
-- Screenshot and JavaScript execution
-- Batch operations
+**For Browser Automation:**
+- Launch and manage multiple browser instances
+- Configure profiles, proxies, and browser settings
+- Handle cookies and authentication sessions
+- Execute complex interaction sequences
 
-**Full API Documentation**: See `docs/EXECUTOR_HTTP_API.md`
+**For Script Recording:**
+- Capture clicks, inputs, navigation, and waits
+- Edit actions visually in the script editor
+- Test and debug with step-by-step replay
+- Add variables and conditional logic
+
+**For AI Integration:**
+- Convert scripts to MCP commands or Skills files
+- Integrate with multiple LLM providers
+- Use semantic extraction for data parsing
+- Build agent-driven automation workflows
+
+### HTTP API Reference
+
+BrowserWing exposes 26+ RESTful endpoints for programmatic browser control:
+
+**Navigation & Control**
+- Navigate to URLs, go back/forward, refresh pages
+- Manage browser windows and tabs
+- Handle page loading and timeouts
+
+**Element Interaction**
+- Click, type, select, and hover actions
+- File uploads and form submissions
+- Keyboard shortcuts and key presses
+
+**Data Extraction**
+- Extract text, HTML, and attributes
+- Semantic content analysis with LLM
+- Screenshot capture (full page or element)
+
+**Advanced Operations**
+- Execute custom JavaScript
+- Manage cookies and local storage
+- Batch operations for efficiency
+- Wait conditions and element visibility
+
+**Complete Documentation**: See `docs/EXECUTOR_HTTP_API.md` for detailed endpoint specifications
 
 ## Contributing
 
