@@ -24,6 +24,10 @@
 
 - 环境中需安装 Google Chrome 或 Chromium，并可正常访问。
 
+## 截图
+
+<img width="600" alt="BrowserWing Homepage" src="https://raw.githubusercontent.com/browserwing/browserwing/main/docs/assets/screenshot_homepage.png">
+
 ## 快速开始
 
 ### 方式 A — 通过包管理器安装（推荐）

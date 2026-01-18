@@ -37,6 +37,10 @@ https://github.com/user-attachments/assets/7018126f-01c8-468f-a30d-3ca36f769876
 
 - Google Chrome or Chromium installed and accessible in your environment.
 
+## Screenshots
+
+<img width="600" alt="BrowserWing Homepage" src="https://raw.githubusercontent.com/browserwing/browserwing/main/docs/assets/screenshot_homepage.png">
+
 ## Quick Start
 
 ### Option A — Install via Package Manager (recommended)
