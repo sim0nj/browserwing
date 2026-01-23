@@ -91,19 +91,37 @@ export default function BrowserManager() {
   }, [])
 
   useEffect(() => {
+    // 初始化加载：先加载实例列表，再加载当前实例（以便自动选择默认实例）
+    const initLoad = async () => {
+      const instanceList = await loadInstances()
+      await loadCurrentInstance(instanceList)
+    }
+
     loadStatus()
     loadScripts()
     loadConfigs()
-    loadInstances()
-    loadCurrentInstance()
+    initLoad()
     
-    // 定时刷新状态和录制状态
-    const interval = setInterval(() => {
+    // 定时刷新状态、录制状态和实例状态
+    const interval = setInterval(async () => {
       loadStatus()
       loadRecordingStatus()
+      const instanceList = await loadInstances()  // 刷新实例列表
+      await loadCurrentInstance(instanceList)  // 刷新当前实例
     }, 2000) // 每2秒刷新状态,以便及时响应页面内的录制操作
     
-    return () => clearInterval(interval)
+    // 页面获得焦点时刷新
+    const handleFocus = async () => {
+      loadStatus()
+      const instanceList = await loadInstances()
+      await loadCurrentInstance(instanceList)
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const loadStatus = async () => {
@@ -118,9 +136,20 @@ export default function BrowserManager() {
   const handleStart = async () => {
     try {
       setStartingBrowser(true)
-      const response = await api.startBrowser()
-      showMessage(t(response.data.message), 'success')
+
+      // 如果有当前实例，启动当前实例
+      if (currentInstance) {
+        await api.startBrowserInstance(currentInstance.id)
+        showMessage(t('browser.messages.startSuccess'), 'success')
+      } else {
+      // 否则使用旧的 API（向后兼容）
+        const response = await api.startBrowser()
+        showMessage(t(response.data.message), 'success')
+      }
+
       await loadStatus()
+      await loadInstances()
+      await loadCurrentInstance()
     } catch (err: any) {
       showMessage(t(err.response?.data?.error || 'browser.messages.startError'), 'error')
     } finally {
@@ -132,9 +161,20 @@ export default function BrowserManager() {
     try {
       setStoppingBrowser(true)
       showMessage(t('browser.messages.stopInfo'), 'info')
-      const response = await api.stopBrowser()
-      showMessage(t(response.data.message) + ' ' + t('browser.messages.stopSuccess'), 'success')
+
+      // 如果有当前实例，停止当前实例
+      if (currentInstance) {
+        await api.stopBrowserInstance(currentInstance.id)
+        showMessage(t('browser.messages.stopSuccess'), 'success')
+      } else {
+      // 否则使用旧的 API（向后兼容）
+        const response = await api.stopBrowser()
+        showMessage(t(response.data.message) + ' ' + t('browser.messages.stopSuccess'), 'success')
+      }
+
       await loadStatus()
+      await loadInstances()
+      await loadCurrentInstance()
     } catch (err: any) {
       showMessage(t(err.response?.data?.error || 'browser.messages.stopError'), 'error')
     } finally {
@@ -168,7 +208,9 @@ export default function BrowserManager() {
 
     try {
       setOpeningPage(true)
-      const response = await api.openBrowserPage(targetUrl, language)
+      // 传递当前实例ID
+      const instanceId = currentInstance?.id || ''
+      const response = await api.openBrowserPage(targetUrl, language, instanceId)
       showMessage(t(response.data.message), 'success')
       // 将当前URL添加到历史记录
       saveToHistory(targetUrl)
@@ -242,24 +284,60 @@ export default function BrowserManager() {
   const loadInstances = async () => {
     try {
       const response = await api.listBrowserInstances()
-      setInstances(response.data.instances || [])
+      const instanceList = response.data.instances || []
+      setInstances(instanceList)
+      return instanceList
     } catch (err) {
       console.error('获取浏览器实例失败:', err)
+      return []
     }
   }
 
-  const loadCurrentInstance = async () => {
+  const loadCurrentInstance = async (instanceList?: BrowserInstance[]) => {
     try {
       const response = await api.getCurrentBrowserInstance()
       setCurrentInstance(response.data.instance || null)
     } catch (err) {
-      // 没有当前实例
-      setCurrentInstance(null)
+      // 没有当前实例，尝试选择一个合适的实例
+      const list = instanceList || instances
+
+      // 优先选择运行中的默认实例
+      let targetInstance = list.find(i => i.is_default && i.is_active)
+
+      // 如果默认实例未运行，选择第一个运行中的实例
+      if (!targetInstance) {
+        targetInstance = list.find(i => i.is_active)
+      }
+
+      // 如果没有运行中的实例，选择默认实例（即使未运行）
+      if (!targetInstance) {
+        targetInstance = list.find(i => i.is_default)
+      }
+
+      if (targetInstance) {
+        // 静默切换到选中的实例（不显示消息）
+        try {
+          await api.switchBrowserInstance(targetInstance.id)
+          setCurrentInstance(targetInstance)
+        } catch (switchErr) {
+          console.error('Failed to switch to instance:', switchErr)
+        }
+      } else {
+        setCurrentInstance(null)
+      }
     }
   }
 
   const handleSwitchInstance = async (id: string) => {
     try {
+      // 检查实例是否存在
+      const targetInstance = instances.find(i => i.id === id)
+      if (!targetInstance) {
+        showMessage(t('browser.instance.notFound'), 'error')
+        return
+      }
+
+      // 直接切换到该实例（不自动启动）
       await api.switchBrowserInstance(id)
       showMessage(t('browser.instance.switchSuccess'), 'success')
       await loadCurrentInstance()
@@ -309,7 +387,9 @@ export default function BrowserManager() {
   const handleStartRecording = async () => {
     try {
       setRecordingLoading(true)
-      const response = await api.startRecording()
+      // 传递当前实例ID
+      const instanceId = currentInstance?.id || ''
+      const response = await api.startRecording(instanceId)
       showMessage(t(response.data.message), 'success')
       await loadRecordingStatus()
     } catch (err: any) {
@@ -376,6 +456,16 @@ export default function BrowserManager() {
       setExecutingScript(true)
       // 使用选中的实例（如果有）或使用当前实例
       const instanceId = selectedInstanceForPlay || currentInstance?.id || ''
+
+      // 检查是否有实例可用
+      if (!instanceId) {
+        const runningInstances = instances.filter(i => i.is_active)
+        if (runningInstances.length === 0) {
+          showMessage(t('script.messages.noBrowserRunning'), 'error')
+          return
+        }
+      }
+
       const response = await api.playScript(scriptId, undefined, instanceId)
       showMessage(t(response.data.message), 'success')
     } catch (err: any) {
@@ -442,23 +532,23 @@ export default function BrowserManager() {
               <div className={`w-3 h-3 rounded-full ${status.is_running ? 'bg-gray-900 dark:bg-gray-100' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
               <span>{t('browser.control.title')}</span>
             </h2>
-            {/* 浏览器实例选择器 */}
-            {instances.length > 0 && (
+            {/* 浏览器实例选择器 - 只在有多个实例时显示 */}
+            {instances.length > 1 && (
               <div className="flex items-center space-x-2">
                 <select
-                  value={currentInstance?.id || ''}
+                  value={currentInstance?.id || instances[0]?.id || ''}
                   onChange={(e) => {
                     if (e.target.value) {
                       handleSwitchInstance(e.target.value)
                     }
                   }}
-                  disabled={instances.filter(i => i.is_active).length === 0}
                   className="input text-sm py-1 px-2"
                 >
-                  <option value="">{t('browser.instance.selectInstance')}</option>
-                  {instances.filter(i => i.is_active).map((instance) => (
+                  {instances.map((instance) => (
                     <option key={instance.id} value={instance.id}>
-                      {instance.name} {instance.is_default ? `(${t('browser.instance.default')})` : ''}
+                      {instance.name}
+                      {instance.is_default ? ` (${t('browser.instance.default')})` : ''}
+                      {!instance.is_active ? ` [${t('browser.instance.stopped')}]` : ''}
                     </option>
                   ))}
                 </select>
@@ -713,7 +803,7 @@ export default function BrowserManager() {
 
             <div className="space-y-4">
               {/* 实例选择器（仅显示运行中的实例） */}
-              {instances.filter(i => i.is_active).length > 1 && (
+              {instances.length > 1 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {t('browser.script.selectInstance')}
@@ -724,9 +814,11 @@ export default function BrowserManager() {
                     className="input w-full"
                   >
                     <option value="">{t('browser.script.useCurrentInstance')}</option>
-                    {instances.filter(i => i.is_active).map((instance) => (
+                    {instances.map((instance) => (
                       <option key={instance.id} value={instance.id}>
-                        {instance.name} {instance.id === currentInstance?.id ? `(${t('browser.instance.current')})` : ''}
+                        {instance.name}
+                        {instance.id === currentInstance?.id ? ` (${t('browser.instance.current')})` : ''}
+                        {!instance.is_active ? ` [${t('browser.instance.stopped')}]` : ''}
                       </option>
                     ))}
                   </select>

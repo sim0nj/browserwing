@@ -426,9 +426,6 @@ func (am *AgentManager) initExecutorToolConfigs() error {
 		count++
 	}
 
-	if count > 0 {
-		logger.Info(am.ctx, "✓ Initialized %d Executor tool configs", count)
-	}
 	return nil
 }
 
@@ -455,7 +452,6 @@ func (am *AgentManager) initExecutorTools() error {
 	for _, meta := range executorTools {
 		// 检查工具是否被启用
 		if config, ok := configMap[meta.Name]; ok && !config.Enabled {
-			logger.Info(am.ctx, "Executor tool %s is disabled, skipping", meta.Name)
 			continue
 		}
 
@@ -473,8 +469,6 @@ func (am *AgentManager) initExecutorTools() error {
 		// 注册到工具注册表
 		am.toolReg.Register(wrappedTool)
 		count++
-
-		logger.Debug(am.ctx, "Registered executor tool (wrapped): %s", meta.Name)
 	}
 
 	return nil

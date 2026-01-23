@@ -93,6 +93,14 @@ func main() {
 
 	log.Println("✓ Database initialization successful")
 
+	// 初始化默认浏览器实例
+	err = initDefaultBrowserInstance(db, cfg)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize default browser instance: %v", err)
+	} else {
+		log.Println("✓ Default browser instance initialized successfully")
+	}
+
 	// 初始化默认用户（如果启用了认证）
 	if cfg.Auth.Enabled {
 		err = initDefaultUser(db, cfg)
@@ -269,6 +277,96 @@ func openBrowser(url string) {
 	}
 
 	_ = cmd.Start() // 不阻塞，忽略错误（有些环境可能没有 GUI）
+}
+
+// initDefaultBrowserInstance 初始化默认浏览器实例
+func initDefaultBrowserInstance(db *storage.BoltDB, cfg *config.Config) error {
+	// 检查是否已存在默认实例
+	defaultInstance, err := db.GetDefaultBrowserInstance()
+	if err == nil && defaultInstance != nil {
+		log.Printf("Default browser instance already exists: %s (ID: %s)", defaultInstance.Name, defaultInstance.ID)
+		return nil
+	}
+
+	// 查找默认 Chrome 路径
+	var binPath string
+	var userDataDir string
+
+	// 获取默认浏览器路径（参考 config.go 的逻辑）
+	commonPaths := []string{
+		"/usr/bin/google-chrome",
+		"/usr/bin/chromium-browser",
+		"/usr/bin/chromium",
+		"/usr/bin/google-chrome-stable",
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+		"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+		"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			binPath = path
+			log.Printf("Found browser at: %s", binPath)
+			break
+		}
+	}
+
+	// 如果配置中有指定路径，优先使用配置的路径
+	if cfg.Browser != nil && cfg.Browser.BinPath != "" {
+		binPath = cfg.Browser.BinPath
+		log.Printf("Using browser path from config: %s", binPath)
+	}
+
+	// 设置默认用户数据目录
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		userDataDir = filepath.Join(homeDir, ".browserwing", "default-profile")
+	}
+
+	// 创建默认实例
+	useStealth := true
+	headless := false
+	
+	// 根据环境自动设置 headless
+	display := os.Getenv("DISPLAY")
+	waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+	if runtime.GOOS == "linux" && display == "" && waylandDisplay == "" {
+		headless = true
+		log.Println("Detected headless environment, enabling headless mode for default instance")
+	}
+
+	instance := &models.BrowserInstance{
+		ID:          "default",
+		Name:        "默认浏览器",
+		Description: "系统默认浏览器实例",
+		Type:        "local",
+		BinPath:     binPath,
+		UserDataDir: userDataDir,
+		UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+		UseStealth:  &useStealth,
+		Headless:    &headless,
+		LaunchArgs: []string{
+			"disable-blink-features=AutomationControlled",
+			"excludeSwitches=enable-automation",
+			"no-first-run",
+			"no-default-browser-check",
+			"window-size=1920,1080",
+			"start-maximized",
+		},
+		IsDefault: true,
+		IsActive:  false,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// 保存到数据库
+	if err := db.SaveBrowserInstance(instance); err != nil {
+		return fmt.Errorf("failed to save default browser instance: %w", err)
+	}
+
+	log.Printf("Created default browser instance: %s (BinPath: %s, UserDataDir: %s)", 
+		instance.Name, instance.BinPath, instance.UserDataDir)
+	return nil
 }
 
 // initDefaultUser 初始化默认用户

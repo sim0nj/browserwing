@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"image"
 	"image/color/palette"
@@ -22,23 +23,28 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+//go:embed scripts/indicator.js
+var indicatorScript string
+
 // Player 脚本回放器
 type Player struct {
-	extractedData    map[string]interface{}          // 存储抓取的数据
-	successCount     int                             // 成功步骤数
-	failCount        int                             // 失败步骤数
-	recordingPage    *rod.Page                       // 录制的页面
-	recordingOutputs chan *proto.PageScreencastFrame // 录制帧通道
-	recordingDone    chan bool                       // 录制完成信号
-	pages            map[int]*rod.Page               // 多标签页支持 (key: tab index)
-	currentPage      *rod.Page                       // 当前活动页面
-	tabCounter       int                             // 标签页计数器
-	downloadedFiles  []string                        // 下载的文件路径列表
-	downloadPath     string                          // 下载目录路径
-	downloadCtx      context.Context                 // 下载监听上下文
-	downloadCancel   context.CancelFunc              // 取消下载监听
-	currentScriptName string                         // 当前执行的脚本名称
-	currentLang      string                         // 当前语言设置
+	extractedData     map[string]interface{}          // 存储抓取的数据
+	successCount      int                             // 成功步骤数
+	failCount         int                             // 失败步骤数
+	recordingPage     *rod.Page                       // 录制的页面
+	recordingOutputs  chan *proto.PageScreencastFrame // 录制帧通道
+	recordingDone     chan bool                       // 录制完成信号
+	pages             map[int]*rod.Page               // 多标签页支持 (key: tab index)
+	currentPage       *rod.Page                       // 当前活动页面
+	tabCounter        int                             // 标签页计数器
+	downloadedFiles   []string                        // 下载的文件路径列表
+	downloadPath      string                          // 下载目录路径
+	downloadCtx       context.Context                 // 下载监听上下文
+	downloadCancel    context.CancelFunc              // 取消下载监听
+	currentScriptName string                          // 当前执行的脚本名称
+	currentLang       string                          // 当前语言设置
+	currentActions    []models.ScriptAction           // 当前执行的脚本动作列表
+	currentStepIndex  int                             // 当前执行到的步骤索引
 }
 
 // highlightElement 高亮显示元素
@@ -93,232 +99,7 @@ func (p *Player) showAIControlIndicator(ctx context.Context, page *rod.Page, scr
 	scriptLabelText := getI18nText("ai.control.script", currentLang)
 	readyText := getI18nText("ai.control.ready", currentLang)
 
-	_, err := page.Eval(`(scriptName, titleText, scriptLabelText, readyText) => {
-		// 如果已经存在且有保护，直接返回
-		if (window.__browserwingAIIndicatorProtected__) {
-			return true;
-		}
-
-		// 创建或重新创建指示器的函数
-		function createAIIndicator() {
-			// 清理旧的闪烁定时器（如果有）
-			if (window.__browserwingBlinkInterval__) {
-				clearInterval(window.__browserwingBlinkInterval__);
-				window.__browserwingBlinkInterval__ = null;
-			}
-			
-			// 移除已存在的指示器（如果有）
-			const existingIndicator = document.getElementById('browserwing-ai-indicator');
-			if (existingIndicator) {
-				existingIndicator.remove();
-			}
-
-			// 创建容器
-			const container = document.createElement('div');
-			container.id = 'browserwing-ai-indicator';
-			container.className = '__browserwing-protected__';
-			container.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; pointer-events: none !important; z-index: 2147483647 !important; opacity: 1 !important; visibility: visible !important;';
-			
-			// 添加页面边框 - 亮蓝色主题，加粗边框，使用JS控制闪烁效果
-			const border = document.createElement('div');
-			border.id = 'browserwing-ai-border';
-			border.className = '__browserwing-protected__';
-			border.style.cssText = 'position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; border: 8px solid #4FC3F7 !important; box-shadow: 0 0 15px #4FC3F7 !important, 0 0 30px rgba(79, 195, 247, 0.6) !important, inset 0 0 30px rgba(79, 195, 247, 0.4) !important; pointer-events: none !important; transition: opacity 0.1s ease !important;';
-			
-			// 添加控制面板 - 放在右边
-			const panel = document.createElement('div');
-			panel.id = 'browserwing-ai-panel';
-			panel.className = '__browserwing-protected__';
-			panel.style.cssText = 'position: absolute !important; top: 20px !important; right: 20px !important; width: 320px !important; max-width: 320px !important; min-width: 280px !important; background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%) !important; border-radius: 16px !important; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important, 0 2px 8px rgba(0, 0, 0, 0.08) !important; border: 1px solid rgba(0, 0, 0, 0.08) !important; overflow: hidden !important; pointer-events: auto !important; backdrop-filter: blur(10px) !important; animation: browserwing-ai-slide-in 0.5s ease-out !important; opacity: 1 !important; visibility: visible !important; cursor: default !important; box-sizing: border-box !important;';
-			
-			// 头部区域（可拖动）
-			const header = document.createElement('div');
-			header.className = '__browserwing-protected__';
-			header.style.cssText = 'padding: 20px 24px 16px !important; background: transparent !important; display: flex !important; align-items: center !important; justify-content: center !important; border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important; gap: 10px !important; opacity: 1 !important; visibility: visible !important; cursor: move !important; user-select: none !important;';
-			
-			// 标题
-			const title = document.createElement('div');
-			title.className = '__browserwing-protected__';
-			title.style.cssText = 'color: #0f172a !important; font-size: 15px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; opacity: 1 !important; visibility: visible !important;';
-			title.textContent = titleText;
-			
-			header.appendChild(title);
-			
-			// 脚本信息区域 - 淡红色背景
-			const infoArea = document.createElement('div');
-			infoArea.className = '__browserwing-protected__';
-			infoArea.style.cssText = 'padding: 16px 24px !important; background: rgba(239, 68, 68, 0.03) !important; border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important; opacity: 1 !important; visibility: visible !important;';
-			
-			const scriptInfo = document.createElement('div');
-			scriptInfo.className = '__browserwing-protected__';
-			scriptInfo.style.cssText = 'display: flex !important; align-items: center !important; gap: 8px !important; color: #64748b !important; font-size: 13px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; opacity: 1 !important; visibility: visible !important;';
-			
-			const scriptLabel = document.createElement('span');
-			scriptLabel.className = '__browserwing-protected__';
-			scriptLabel.style.cssText = 'color: #94a3b8 !important; opacity: 1 !important; visibility: visible !important;';
-			scriptLabel.textContent = scriptLabelText;
-			
-			const scriptNameSpan = document.createElement('span');
-			scriptNameSpan.className = '__browserwing-protected__';
-			scriptNameSpan.style.cssText = 'color: #475569 !important; font-weight: 500 !important; opacity: 1 !important; visibility: visible !important;';
-			scriptNameSpan.textContent = scriptName || 'Untitled';
-			
-			scriptInfo.appendChild(scriptLabel);
-			scriptInfo.appendChild(scriptNameSpan);
-			infoArea.appendChild(scriptInfo);
-			
-			// 状态显示区域
-			const statusArea = document.createElement('div');
-			statusArea.className = '__browserwing-protected__';
-			statusArea.style.cssText = 'padding: 20px 24px 24px !important; background: transparent !important; opacity: 1 !important; visibility: visible !important; box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; overflow: hidden !important;';
-			
-			// 状态卡片 - 红色主题，防止文本溢出
-			const statusCard = document.createElement('div');
-			statusCard.id = 'browserwing-ai-status-card';
-			statusCard.className = '__browserwing-protected__';
-			statusCard.style.cssText = 'width: 100% !important; max-width: 100% !important; padding: 14px 20px !important; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important; color: white !important; border-radius: 12px !important; font-size: 14px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 10px !important; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25) !important, 0 2px 4px rgba(0, 0, 0, 0.1) !important; opacity: 1 !important; visibility: visible !important; box-sizing: border-box !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;';
-			
-			// 脉动指示器
-			const indicator = document.createElement('div');
-			indicator.className = '__browserwing-protected__';
-			indicator.style.cssText = 'width: 10px !important; height: 10px !important; min-width: 10px !important; min-height: 10px !important; border-radius: 50% !important; background: white !important; box-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important; animation: browserwing-ai-blink 1.5s ease-in-out infinite !important; opacity: 1 !important; visibility: visible !important; flex-shrink: 0 !important;';
-			
-			const statusText = document.createElement('span');
-			statusText.id = 'browserwing-ai-status-text';
-			statusText.className = '__browserwing-protected__';
-			statusText.style.cssText = 'opacity: 1 !important; visibility: visible !important; color: white !important; font-size: 14px !important; font-weight: 600 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; letter-spacing: -0.01em !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; max-width: 100% !important; flex: 1 !important; text-align: center !important;';
-			statusText.textContent = readyText;
-			
-			statusCard.appendChild(indicator);
-			statusCard.appendChild(statusText);
-			statusArea.appendChild(statusCard);
-			
-			// 组装面板
-			panel.appendChild(header);
-			panel.appendChild(infoArea);
-			panel.appendChild(statusArea);
-			
-			// 添加拖动功能
-			let isDragging = false;
-			let currentX = 0;
-			let currentY = 0;
-			let initialX = 0;
-			let initialY = 0;
-			let xOffset = 0;
-			let yOffset = 0;
-			
-			header.addEventListener('mousedown', function(e) {
-				initialX = e.clientX - xOffset;
-				initialY = e.clientY - yOffset;
-				isDragging = true;
-				panel.__isDragging = false;
-				e.preventDefault();
-			});
-			
-			document.addEventListener('mousemove', function(e) {
-				if (isDragging) {
-					e.preventDefault();
-					currentX = e.clientX - initialX;
-					currentY = e.clientY - initialY;
-					xOffset = currentX;
-					yOffset = currentY;
-					
-					if (Math.abs(currentX) > 5 || Math.abs(currentY) > 5) {
-						panel.__isDragging = true;
-					}
-					
-					panel.style.transform = 'translate(' + currentX + 'px, ' + currentY + 'px)';
-				}
-			});
-			
-			document.addEventListener('mouseup', function() {
-				if (isDragging) {
-					setTimeout(function() {
-						panel.__isDragging = false;
-					}, 100);
-				}
-				isDragging = false;
-			});
-			
-			// 添加 CSS 动画（只保留必要的动画）
-			const style = document.createElement('style');
-			style.id = 'browserwing-ai-styles';
-			style.textContent = ` + "`" + `
-				@keyframes browserwing-ai-slide-in {
-					from { opacity: 0 !important; transform: translateX(20px) !important; }
-					to { opacity: 1 !important; transform: translateX(0) !important; }
-				}
-				@keyframes browserwing-ai-blink {
-					0%, 100% { opacity: 1 !important; transform: scale(1) !important; }
-					50% { opacity: 0.4 !important; transform: scale(0.85) !important; }
-				}
-			` + "`" + `;
-			
-			// 使用 JavaScript 定时器控制边框闪烁
-			let borderVisible = true;
-			const blinkInterval = setInterval(() => {
-				if (border && border.parentNode) {
-					borderVisible = !borderVisible;
-					border.style.opacity = borderVisible ? '1' : '0';
-				}
-			}, 750); // 每750毫秒切换一次（显示0.75秒，隐藏0.75秒）
-			
-			// 保存定时器以便后续清理
-			window.__browserwingBlinkInterval__ = blinkInterval;
-			
-			// 组装容器
-			container.appendChild(border);
-			container.appendChild(panel);
-			document.head.appendChild(style);
-			
-			// 确保 body 存在
-			if (!document.body) {
-				return null;
-			}
-			
-			document.body.appendChild(container);
-			
-			return container;
-		}
-		
-		// 创建指示器
-		const container = createAIIndicator();
-		
-		if (!container) {
-			return false;
-		}
-		
-		// 使用 MutationObserver 保护指示器不被删除
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				// 检查是否有受保护的节点被删除
-				mutation.removedNodes.forEach((node) => {
-					if (node.id === 'browserwing-ai-indicator' || 
-					    node.className === '__browserwing-protected__' ||
-					    (node.querySelector && node.querySelector('.__browserwing-protected__'))) {
-						// 重新创建
-						setTimeout(() => {
-							if (!document.getElementById('browserwing-ai-indicator')) {
-								createAIIndicator();
-							}
-						}, 100);
-					}
-				});
-			});
-		});
-		
-		// 监控整个 body 的变化
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
-		
-		// 保存 observer 以便后续清理
-		window.__browserwingAIObserver__ = observer;
-		window.__browserwingAIIndicatorProtected__ = true;
-		
-		return true;
-	}`, scriptName, titleText, scriptLabelText, readyText)
+	_, err := page.Eval(indicatorScript, scriptName, titleText, scriptLabelText, readyText)
 
 	if err != nil {
 		logger.Warn(ctx, "Failed to show AI control indicator: %v", err)
@@ -357,29 +138,187 @@ func (p *Player) ensureAIControlIndicator(ctx context.Context, page *rod.Page) {
 			currentLang = "zh-CN"
 		}
 		p.showAIControlIndicator(ctx, page, p.currentScriptName, currentLang)
+		
+		// 如果有当前执行的脚本动作，重新初始化步骤列表
+		if len(p.currentActions) > 0 {
+			p.initAIControlSteps(ctx, page, p.currentActions)
+			
+			// 恢复之前步骤的状态
+			for i := 0; i < p.currentStepIndex && i < len(p.currentActions); i++ {
+				// 标记已完成的步骤为成功（简化处理）
+				p.markStepCompleted(ctx, page, i+1, true)
+			}
+			
+			// 如果当前正在执行某个步骤，也更新其状态
+			if p.currentStepIndex > 0 && p.currentStepIndex <= len(p.currentActions) {
+				p.updateAIControlStatus(ctx, page, p.currentStepIndex, len(p.currentActions), p.currentActions[p.currentStepIndex-1].Type)
+			}
+		}
 	}
 }
 
-// updateAIControlStatus 更新 AI 控制状态显示
-func (p *Player) updateAIControlStatus(ctx context.Context, page *rod.Page, current, total int, actionType string) {
+// initAIControlSteps 初始化步骤列表
+func (p *Player) initAIControlSteps(ctx context.Context, page *rod.Page, actions []models.ScriptAction) {
 	if page == nil {
 		return
 	}
 
 	// 获取国际化文本
 	stepText := getI18nText("ai.control.step", p.currentLang)
-	actionText := getActionDisplayText(actionType, p.currentLang)
 	
-	_, err := page.Eval(`(current, total, stepText, actionText) => {
-		const statusText = document.getElementById('browserwing-ai-status-text');
-		if (statusText) {
-			statusText.textContent = stepText + ' ' + current + '/' + total + ': ' + actionText;
+	// 构建步骤数据
+	type stepData struct {
+		Index  int    `json:"index"`
+		Action string `json:"action"`
+	}
+	
+	steps := make([]stepData, len(actions))
+	for i, action := range actions {
+		steps[i] = stepData{
+			Index:  i + 1,
+			Action: getActionDisplayText(action.Type, p.currentLang),
 		}
+	}
+
+	_, err := page.Eval(`(stepText, stepsData) => {
+		const container = document.getElementById('browserwing-ai-steps-container');
+		if (!container) return false;
+		
+		// 清空容器
+		container.innerHTML = '';
+		
+		// 添加所有步骤
+		stepsData.forEach((step) => {
+			const stepItem = document.createElement('div');
+			stepItem.id = 'browserwing-ai-step-' + step.index;
+			stepItem.className = '__browserwing-protected__';
+			stepItem.style.cssText = 'padding: 12px 16px !important; border-bottom: 1px solid #e2e8f0 !important; display: flex !important; align-items: center !important; gap: 12px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; background: white !important; transition: all 0.3s ease !important;';
+			
+			// 步骤序号
+			const stepNum = document.createElement('div');
+			stepNum.className = '__browserwing-protected__ step-number';
+			stepNum.style.cssText = 'width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; background: #e2e8f0 !important; color: #94a3b8 !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 12px !important; font-weight: 600 !important; transition: all 0.3s ease !important;';
+			stepNum.textContent = step.index;
+			
+			// 步骤内容
+			const stepContent = document.createElement('div');
+			stepContent.className = '__browserwing-protected__ step-content';
+			stepContent.style.cssText = 'flex: 1 !important; color: #64748b !important; font-size: 13px !important; font-weight: 500 !important; transition: all 0.3s ease !important;';
+			stepContent.textContent = step.action;
+			
+			// 状态图标（初始为等待状态 - 时钟图标）
+			const statusIcon = document.createElement('div');
+			statusIcon.className = '__browserwing-protected__ browserwing-step-status';
+			statusIcon.style.cssText = 'width: 24px !important; height: 24px !important; min-width: 24px !important; border-radius: 50% !important; background: #e2e8f0 !important; color: #94a3b8 !important; display: flex !important; align-items: center !important; justify-content: center !important; transition: all 0.3s ease !important;';
+			statusIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 14px !important; height: 14px !important;"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>';
+			
+			stepItem.appendChild(stepNum);
+			stepItem.appendChild(stepContent);
+			stepItem.appendChild(statusIcon);
+			container.appendChild(stepItem);
+		});
+		
 		return true;
-	}`, current, total, stepText, actionText)
+	}`, stepText, steps)
+
+	if err != nil {
+		logger.Warn(ctx, "Failed to initialize AI control steps: %v", err)
+	}
+}
+
+// updateAIControlStatus 更新步骤状态
+func (p *Player) updateAIControlStatus(ctx context.Context, page *rod.Page, current, total int, actionType string) {
+	if page == nil {
+		return
+	}
+
+	_, err := page.Eval(`(stepIndex, status) => {
+		const stepItem = document.getElementById('browserwing-ai-step-' + stepIndex);
+		if (!stepItem) return false;
+		
+		const statusIcon = stepItem.querySelector('.browserwing-step-status');
+		const stepNum = stepItem.querySelector('.step-number');
+		const stepContent = stepItem.querySelector('.step-content');
+		if (!statusIcon) return false;
+		
+		// 更新为执行中状态 - 鲜艳的蓝色高亮
+		stepItem.setAttribute('style', 'padding: 12px 16px !important; border-bottom: 1px solid #e2e8f0 !important; display: flex !important; align-items: center !important; gap: 12px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important; border-left: 4px solid #3b82f6 !important; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important; transition: all 0.3s ease !important;');
+		
+		if (stepNum) {
+			stepNum.setAttribute('style', 'width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; background: #3b82f6 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 12px !important; font-weight: 600 !important; transition: all 0.3s ease !important;');
+		}
+		
+		if (stepContent) {
+			stepContent.setAttribute('style', 'flex: 1 !important; color: #1e40af !important; font-size: 13px !important; font-weight: 600 !important; transition: all 0.3s ease !important;');
+		}
+		
+		// 执行中的 SVG 图标（播放图标）
+		statusIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 14px !important; height: 14px !important;"><path d="M8 5v14l11-7z"/></svg>';
+		statusIcon.setAttribute('style', 'width: 24px !important; height: 24px !important; min-width: 24px !important; border-radius: 50% !important; background: #3b82f6 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; animation: browserwing-ai-blink 1.5s ease-in-out infinite !important; transition: all 0.3s ease !important;');
+		
+		// 滚动到当前步骤
+		stepItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		
+		return true;
+	}`, current)
 
 	if err != nil {
 		logger.Warn(ctx, "Failed to update AI control status: %v", err)
+	}
+}
+
+// markStepCompleted 标记步骤为已完成
+func (p *Player) markStepCompleted(ctx context.Context, page *rod.Page, stepIndex int, success bool) {
+	if page == nil {
+		return
+	}
+
+	_, err := page.Eval(`(stepIndex, success) => {
+		const stepItem = document.getElementById('browserwing-ai-step-' + stepIndex);
+		if (!stepItem) return false;
+		
+		const statusIcon = stepItem.querySelector('.browserwing-step-status');
+		const stepNum = stepItem.querySelector('.step-number');
+		const stepContent = stepItem.querySelector('.step-content');
+		if (!statusIcon) return false;
+		
+		if (success) {
+			// 成功 - 鲜艳的绿色高亮
+			stepItem.setAttribute('style', 'padding: 12px 16px !important; border-bottom: 1px solid #e2e8f0 !important; display: flex !important; align-items: center !important; gap: 12px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%) !important; border-left: 4px solid #10b981 !important; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important; transition: all 0.3s ease !important;');
+			
+			if (stepNum) {
+				stepNum.setAttribute('style', 'width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; background: #10b981 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 12px !important; font-weight: 600 !important; transition: all 0.3s ease !important;');
+			}
+			
+			if (stepContent) {
+				stepContent.setAttribute('style', 'flex: 1 !important; color: #15803d !important; font-size: 13px !important; font-weight: 500 !important; transition: all 0.3s ease !important;');
+			}
+			
+			// 成功的 SVG 图标（对勾）
+			statusIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px !important; height: 16px !important;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+			statusIcon.setAttribute('style', 'width: 24px !important; height: 24px !important; min-width: 24px !important; border-radius: 50% !important; background: #10b981 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; animation: none !important; transition: all 0.3s ease !important;');
+		} else {
+			// 失败 - 鲜艳的红色高亮
+			stepItem.setAttribute('style', 'padding: 12px 16px !important; border-bottom: 1px solid #e2e8f0 !important; display: flex !important; align-items: center !important; gap: 12px !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", Helvetica, Arial, sans-serif !important; background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important; border-left: 4px solid #ef4444 !important; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15) !important; transition: all 0.3s ease !important;');
+			
+			if (stepNum) {
+				stepNum.setAttribute('style', 'width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; background: #ef4444 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 12px !important; font-weight: 600 !important; transition: all 0.3s ease !important;');
+			}
+			
+			if (stepContent) {
+				stepContent.setAttribute('style', 'flex: 1 !important; color: #b91c1c !important; font-size: 13px !important; font-weight: 500 !important; transition: all 0.3s ease !important;');
+			}
+			
+			// 失败的 SVG 图标（叉号）
+			statusIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px !important; height: 16px !important;"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+			statusIcon.setAttribute('style', 'width: 24px !important; height: 24px !important; min-width: 24px !important; border-radius: 50% !important; background: #ef4444 !important; color: white !important; display: flex !important; align-items: center !important; justify-content: center !important; animation: none !important; transition: all 0.3s ease !important;');
+		}
+		
+		return true;
+	}`, stepIndex, success)
+
+	if err != nil {
+		logger.Warn(ctx, "Failed to mark step completion: %v", err)
 	}
 }
 
@@ -1010,17 +949,23 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 		time.Sleep(1 * time.Second)
 	}
 
-	// 保存脚本名称，用于后续重新注入时使用
+	// 保存脚本名称和动作列表，用于后续重新注入时使用
 	p.currentScriptName = script.Name
+	p.currentActions = script.Actions
+	p.currentStepIndex = 0
 	
 	// 在页面完全稳定后显示 AI 控制指示器
 	p.showAIControlIndicator(ctx, page, script.Name, currentLang)
+	
+	// 初始化步骤列表
+	p.initAIControlSteps(ctx, page, script.Actions)
 
 	// 执行每个操作
 	for i, action := range script.Actions {
+		p.currentStepIndex = i
 		logger.Info(ctx, "[%d/%d] Execute action: %s", i+1, len(script.Actions), action.Type)
 
-		// 更新 AI 控制状态显示
+		// 更新 AI 控制状态显示（标记为执行中）
 		p.updateAIControlStatus(ctx, page, i+1, len(script.Actions), action.Type)
 
 		// 检查条件执行
@@ -1031,6 +976,8 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 			} else if !shouldExecute {
 				logger.Info(ctx, "Skipping action due to condition not met: %s %s %s",
 					action.Condition.Variable, action.Condition.Operator, action.Condition.Value)
+				// 标记为跳过（视为成功）
+				p.markStepCompleted(ctx, page, i+1, true)
 				continue
 			}
 			logger.Info(ctx, "Condition met, executing action: %s %s %s",
@@ -1040,9 +987,13 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 		if err := p.executeAction(ctx, page, action); err != nil {
 			logger.Warn(ctx, "Action execution failed (continuing with subsequent steps): %v", err)
 			p.failCount++
+			// 标记步骤为失败
+			p.markStepCompleted(ctx, page, i+1, false)
 			// 不要中断，继续执行下一步
 		} else {
 			p.successCount++
+			// 标记步骤为成功
+			p.markStepCompleted(ctx, page, i+1, true)
 
 			// 如果 action 提取了数据，更新变量上下文
 			if action.VariableName != "" && p.extractedData[action.VariableName] != nil {
@@ -1050,22 +1001,12 @@ func (p *Player) PlayScript(ctx context.Context, page *rod.Page, script *models.
 				logger.Info(ctx, "Updated variable from extracted data: %s = %s", action.VariableName, variables[action.VariableName])
 			}
 		}
-
-		// 操作之间稍微等待，模拟真实用户行为
-		time.Sleep(500 * time.Millisecond)
 	}
 
 	logger.Info(ctx, "Script playback completed - Success: %d, Failed: %d, Total: %d", p.successCount, p.failCount, len(script.Actions))
 	if len(p.extractedData) > 0 {
 		logger.Info(ctx, "Extracted %d data items", len(p.extractedData))
 	}
-
-	// 显示执行完成状态（指示器将保持常驻）
-	completedText := getI18nText("ai.control.completed", currentLang)
-	successText := getI18nText("ai.control.success", currentLang)
-	failedText := getI18nText("ai.control.failed", currentLang)
-	statusMessage := fmt.Sprintf("%s (%s:%d, %s:%d)", completedText, successText, p.successCount, failedText, p.failCount)
-	p.updateAIControlStatus(ctx, page, len(script.Actions), len(script.Actions), statusMessage)
 
 	// 如果所有操作都失败了，返回错误
 	if p.failCount > 0 && p.successCount == 0 {

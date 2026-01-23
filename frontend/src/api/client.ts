@@ -577,8 +577,8 @@ export const api = {
   getBrowserStatus: () =>
     client.get<any>('/browser/status'),
 
-  openBrowserPage: (url: string, language?: string) =>
-    client.post<{ message: string; url: string }>('/browser/open', { url, language }),
+  openBrowserPage: (url: string, language?: string, instanceId?: string) =>
+    client.post<{ message: string; url: string }>('/browser/open', { url, language, instance_id: instanceId }),
 
 
   saveBrowserCookies: () =>
@@ -619,8 +619,8 @@ export const api = {
     client.get<{ instance: BrowserInstance }>('/browser/instances/current'),
 
   // 录制相关
-  startRecording: () =>
-    client.post<{ message: string }>('/browser/record/start'),
+  startRecording: (instanceId?: string) =>
+    client.post<{ message: string }>('/browser/record/start', { instance_id: instanceId }),
 
   stopRecording: () =>
     client.post<{ message: string; actions: ScriptAction[]; count: number }>('/browser/record/stop'),

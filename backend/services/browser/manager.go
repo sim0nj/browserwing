@@ -423,7 +423,15 @@ func (m *Manager) Stop() error {
 func (m *Manager) IsRunning() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.isRunning
+	
+	// 检查是否有当前实例ID
+	if m.currentInstanceID == "" {
+		return m.isRunning // 向后兼容：如果没有实例ID，使用旧逻辑
+	}
+	
+	// 检查当前实例是否真的在运行
+	runtime, exists := m.instances[m.currentInstanceID]
+	return exists && runtime != nil && runtime.browser != nil
 }
 
 // GetActivePage 获取当前活动页面
@@ -675,6 +683,33 @@ func (m *Manager) getConfigForURL(url string) *models.BrowserConfig {
 
 	// 没有匹配的，返回默认配置
 	logger.Info(ctx, "No matching site configuration found, using default configuration")
+	
+	// 如果默认配置未初始化，尝试加载或创建一个
+	if m.defaultBrowserConfig == nil {
+		logger.Info(ctx, "Default configuration not initialized, loading from database")
+		defaultConfig, err := m.db.GetDefaultBrowserConfig()
+		if err != nil {
+			logger.Warn(ctx, "Failed to load default configuration, using system defaults")
+			defaultConfig = m.getDefaultBrowserConfig()
+		}
+		m.defaultBrowserConfig = defaultConfig
+		
+		// 同时加载网站特定配置
+		allConfigs, err := m.db.ListBrowserConfigs()
+		if err != nil {
+			logger.Warn(ctx, "Failed to load site configurations: %v", err)
+			m.siteConfigs = []*models.BrowserConfig{}
+		} else {
+			m.siteConfigs = []*models.BrowserConfig{}
+			for i := range allConfigs {
+				if allConfigs[i].URLPattern != "" && !allConfigs[i].IsDefault {
+					m.siteConfigs = append(m.siteConfigs, &allConfigs[i])
+				}
+			}
+			logger.Info(ctx, "Loaded %d site-specific configurations", len(m.siteConfigs))
+		}
+	}
+	
 	return m.defaultBrowserConfig
 }
 
@@ -1342,9 +1377,40 @@ func (m *Manager) StartInstance(ctx context.Context, instanceID string) error {
 		}
 
 		// 设置浏览器路径
-		if instance.BinPath != "" {
-			l = l.Bin(instance.BinPath)
-			logger.Info(ctx, "Using browser path: %s", instance.BinPath)
+		binPath := instance.BinPath
+		if binPath == "" {
+			// 如果没有指定路径，尝试查找系统中的 Chrome
+			logger.Info(ctx, "BinPath not specified, searching for system Chrome...")
+			commonPaths := []string{
+				"/usr/bin/google-chrome",
+				"/usr/bin/chromium-browser",
+				"/usr/bin/chromium",
+				"/usr/bin/google-chrome-stable",
+				"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+				"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+				"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+			}
+			
+			for _, path := range commonPaths {
+				if _, err := os.Stat(path); err == nil {
+					binPath = path
+					logger.Info(ctx, "Found Chrome at: %s", binPath)
+					break
+				}
+			}
+			
+			// 如果配置文件中有指定路径，优先使用
+			if m.config.Browser != nil && m.config.Browser.BinPath != "" {
+				binPath = m.config.Browser.BinPath
+				logger.Info(ctx, "Using browser path from config: %s", binPath)
+			}
+		}
+		
+		if binPath != "" {
+			l = l.Bin(binPath)
+			logger.Info(ctx, "Using browser path: %s", binPath)
+		} else {
+			logger.Warn(ctx, "No browser path found, will use launcher default (may download Chrome)")
 		}
 
 		// 设置用户数据目录
@@ -1428,8 +1494,10 @@ func (m *Manager) StartInstance(ctx context.Context, instanceID string) error {
 	// 如果是第一个启动的实例或者是默认实例，设置为当前实例
 	if m.currentInstanceID == "" || instance.IsDefault {
 		m.currentInstanceID = instanceID
-
-		// 向后兼容：更新旧字段
+	}
+	
+	// 如果启动的是当前实例，更新向后兼容的旧字段
+	if m.currentInstanceID == instanceID {
 		m.browser = browser
 		m.launcher = launcherObj
 		m.isRunning = true
@@ -1519,21 +1587,35 @@ func (m *Manager) SwitchInstance(ctx context.Context, instanceID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	runtime, exists := m.instances[instanceID]
-	if !exists || runtime == nil {
-		return fmt.Errorf("instance %s is not running", instanceID)
+	// 从数据库获取实例信息，验证实例是否存在
+	instance, err := m.db.GetBrowserInstance(instanceID)
+	if err != nil {
+		return fmt.Errorf("instance %s not found: %w", instanceID, err)
 	}
 
+	// 设置当前实例ID（无论实例是否运行）
 	m.currentInstanceID = instanceID
 
-	// 向后兼容：更新旧字段
-	m.browser = runtime.browser
-	m.launcher = runtime.launcher
-	m.isRunning = true
-	m.startTime = runtime.startTime
-	m.activePage = runtime.activePage
+	// 检查实例是否运行
+	runtime, exists := m.instances[instanceID]
+	if exists && runtime != nil {
+		// 实例正在运行，更新旧字段以保持向后兼容
+		m.browser = runtime.browser
+		m.launcher = runtime.launcher
+		m.isRunning = true
+		m.startTime = runtime.startTime
+		m.activePage = runtime.activePage
+		logger.Info(ctx, "Switched to running instance: %s", instance.Name)
+	} else {
+		// 实例未运行，清空旧字段
+		m.browser = nil
+		m.launcher = nil
+		m.isRunning = false
+		m.startTime = time.Time{}
+		m.activePage = nil
+		logger.Info(ctx, "Switched to stopped instance: %s (not running)", instance.Name)
+	}
 
-	logger.Info(ctx, "Switched to instance: %s", runtime.instance.Name)
 	return nil
 }
 
@@ -1546,12 +1628,19 @@ func (m *Manager) GetCurrentInstance() *models.BrowserInstance {
 		return nil
 	}
 
+	// 首先尝试从运行时获取（如果实例正在运行）
 	runtime, exists := m.instances[m.currentInstanceID]
-	if !exists || runtime == nil {
+	if exists && runtime != nil {
+		return runtime.instance
+	}
+
+	// 如果实例未运行，从数据库获取
+	instance, err := m.db.GetBrowserInstance(m.currentInstanceID)
+	if err != nil {
 		return nil
 	}
 
-	return runtime.instance
+	return instance
 }
 
 // GetInstanceRuntime 获取指定实例的运行时信息

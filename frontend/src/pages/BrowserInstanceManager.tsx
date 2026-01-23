@@ -46,6 +46,25 @@ export default function BrowserInstanceManager() {
   useEffect(() => {
     loadInstances()
     loadCurrentInstance()
+
+    // 定期刷新实例状态（每5秒）
+    const intervalId = setInterval(() => {
+      loadInstances()
+      loadCurrentInstance()
+    }, 5000)
+
+    // 页面获得焦点时刷新
+    const handleFocus = () => {
+      loadInstances()
+      loadCurrentInstance()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    // 清理函数
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const loadInstances = async () => {

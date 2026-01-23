@@ -261,6 +261,12 @@ export default function ScriptManager() {
     const script = scripts.find(s => s.id === scriptId)
     if (!script) return
 
+    // 检查是否有运行中的浏览器实例
+    if (browserInstances.length === 0) {
+      showMessage(t('script.messages.noBrowserRunning'), 'error')
+      return
+    }
+
     // 如果没有指定实例 ID，并且有多个运行中的实例，显示实例选择对话框
     if (!instanceId && browserInstances.length > 1) {
       setInstanceSelectorScript(script)
