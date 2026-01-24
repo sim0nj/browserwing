@@ -89,7 +89,10 @@ export default function LLMManager() {
   }
 
   const handleAdd = async () => {
-    if (!formData.name || !formData.provider || !formData.model || !formData.api_key) {
+    // Ollama 本地运行不需要 API Key
+    const requiresApiKey = formData.provider !== 'ollama'
+    
+    if (!formData.name || !formData.provider || !formData.model || (requiresApiKey && !formData.api_key)) {
       showToast(t('llm.messages.fillRequired'), 'error')
       return
     }
@@ -262,30 +265,38 @@ export default function LLMManager() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('llm.apiKeyRequired')} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={formData.api_key}
-                onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100"
-                placeholder={t('llm.apiKeyPlaceholder')}
-              />
-            </div>
+            {/* Ollama 本地运行不需要 API Key */}
+            {formData.provider !== 'ollama' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('llm.apiKeyRequired')} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={formData.api_key}
+                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100"
+                  placeholder={t('llm.apiKeyPlaceholder')}
+                />
+              </div>
+            )}
 
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('llm.baseUrl')}
+                {t('llm.baseUrl')} {formData.provider === 'ollama' && <span className="text-xs text-gray-500">({t('llm.optional')})</span>}
               </label>
               <input
                 type="text"
                 value={formData.base_url}
                 onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100"
-                placeholder={t('llm.baseUrlPlaceholder')}
+                placeholder={formData.provider === 'ollama' ? 'http://localhost:11434/v1' : t('llm.baseUrlPlaceholder')}
               />
+              {formData.provider === 'ollama' && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {t('llm.ollamaBaseUrlHint')}
+                </p>
+              )}
             </div>
           </div>
 
@@ -423,29 +434,33 @@ export default function LLMManager() {
 
               {editingId === config.id && (
                 <div className="mt-4 pt-4 border-t dark:border-gray-700 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid ${config.provider === 'ollama' ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+                    {/* Ollama 本地运行不需要 API Key */}
+                    {config.provider !== 'ollama' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          {t('llm.apiKey')}
+                        </label>
+                        <input
+                          type="password"
+                          defaultValue={config.api_key}
+                          onBlur={(e) => {
+                            if (e.target.value !== config.api_key) {
+                              handleUpdate(config.id, { ...config, api_key: e.target.value })
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {t('llm.apiKey')}
-                      </label>
-                      <input
-                        type="password"
-                        defaultValue={config.api_key}
-                        onBlur={(e) => {
-                          if (e.target.value !== config.api_key) {
-                            handleUpdate(config.id, { ...config, api_key: e.target.value })
-                          }
-                        }}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        {t('llm.baseUrl')}
+                        {t('llm.baseUrl')} {config.provider === 'ollama' && <span className="text-xs text-gray-500">({t('llm.optional')})</span>}
                       </label>
                       <input
                         type="text"
                         defaultValue={config.base_url}
+                        placeholder={config.provider === 'ollama' ? 'http://localhost:11434/v1' : ''}
                         onBlur={(e) => {
                           if (e.target.value !== config.base_url) {
                             handleUpdate(config.id, { ...config, base_url: e.target.value })
