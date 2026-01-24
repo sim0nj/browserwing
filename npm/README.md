@@ -15,6 +15,16 @@ pnpm add -g browserwing
 yarn global add browserwing
 ```
 
+### macOS Users - Important
+
+If you encounter an error when running BrowserWing on macOS (app gets killed immediately), run this command:
+
+```bash
+xattr -d com.apple.quarantine $(which browserwing)
+```
+
+This removes the quarantine attribute that macOS applies to downloaded executables. [Learn more](https://github.com/browserwing/browserwing/blob/main/docs/MACOS_INSTALLATION_FIX.md)
+
 ## Quick Start
 
 ```bash

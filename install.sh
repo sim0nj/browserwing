@@ -194,6 +194,25 @@ download_binary() {
     print_info "Extraction completed"
 }
 
+# Fix macOS code signature issue
+fix_macos_signature() {
+    print_info "Fixing macOS code signature..."
+    
+    # Remove quarantine attribute
+    if xattr -d com.apple.quarantine "$BINARY_PATH" 2>/dev/null; then
+        print_info "✓ Removed quarantine attribute"
+    else
+        print_debug "No quarantine attribute to remove"
+    fi
+    
+    # Try ad-hoc code signing
+    if codesign -s - "$BINARY_PATH" 2>/dev/null; then
+        print_info "✓ Applied ad-hoc code signature"
+    else
+        print_debug "Ad-hoc signing skipped (may require manual approval)"
+    fi
+}
+
 # Install binary
 install_binary() {
     print_info "Installing BrowserWing..."
@@ -211,11 +230,21 @@ install_binary() {
     cp "$BINARY_NAME" "$BINARY_PATH"
     chmod +x "$BINARY_PATH"
     
+    # Fix macOS code signature issue
+    if [ "$OS" = "darwin" ]; then
+        fix_macos_signature
+    fi
+    
     # Try to create symlink in /usr/local/bin (requires sudo on some systems)
     if [ "$OS" != "windows" ]; then
         if [ -w "$BIN_DIR" ] || [ "$(id -u)" = "0" ]; then
             print_info "Creating symlink in $BIN_DIR..."
             ln -sf "$BINARY_PATH" "$BIN_DIR/browserwing"
+            
+            # Also fix signature for symlink target if it's different
+            if [ "$OS" = "darwin" ] && [ "$BIN_DIR/browserwing" != "$BINARY_PATH" ]; then
+                xattr -d com.apple.quarantine "$BIN_DIR/browserwing" 2>/dev/null || true
+            fi
         else
             print_warning "Cannot create symlink in $BIN_DIR (no write permission)"
             print_info "You can run: sudo ln -sf $BINARY_PATH $BIN_DIR/browserwing"
@@ -242,6 +271,16 @@ print_success() {
     if [ "$OS" != "windows" ] && [ ! -L "$BIN_DIR/browserwing" ]; then
         print_warning "Binary not in PATH. Add to your shell profile:"
         echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
+    fi
+    
+    # macOS specific notice
+    if [ "$OS" = "darwin" ]; then
+        echo ""
+        print_warning "⚠️  macOS Users:"
+        echo "  If the app fails to start, run this command:"
+        echo "  xattr -d com.apple.quarantine $BINARY_PATH"
+        echo ""
+        echo "  See: https://github.com/${REPO}/blob/main/docs/MACOS_INSTALLATION_FIX.md"
     fi
     
     echo ""

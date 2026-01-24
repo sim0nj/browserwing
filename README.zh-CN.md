@@ -46,6 +46,13 @@ browserwing --port 8080
 
 npm 包在安装时会自动测试 GitHub 和 Gitee 镜像，选择最快的源进行下载。
 
+**⚠️ macOS 用户注意：**  
+如果运行时遇到 "killed" 错误，请执行以下命令修复：
+```bash
+xattr -d com.apple.quarantine $(which browserwing)
+```
+详细说明请参见：[macOS 安装问题修复指南](docs/MACOS_INSTALLATION_FIX.md)
+
 **使用 Homebrew (macOS/Linux)：**
 ```bash
 # 即将支持

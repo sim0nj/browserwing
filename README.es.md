@@ -35,6 +35,13 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
+**⚠️ Usuarios de macOS:**  
+Si encuentras un error "killed" al ejecutar, corrígelo con:
+```bash
+xattr -d com.apple.quarantine $(which browserwing)
+```
+Ver la [Guía de corrección de instalación en macOS](docs/MACOS_INSTALLATION_FIX.md) para más detalles.
+
 ### Opción B — Compilar desde código fuente
 
 ```bash

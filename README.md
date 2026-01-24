@@ -65,6 +65,13 @@ browserwing --port 8080
 
 The npm package automatically tests GitHub and Gitee mirrors during installation and selects the fastest one.
 
+**⚠️ macOS Users:**  
+If you encounter a "killed" error when running, fix it with:
+```bash
+xattr -d com.apple.quarantine $(which browserwing)
+```
+See the [macOS Installation Fix Guide](docs/MACOS_INSTALLATION_FIX.md) for details.
+
 **Using Homebrew (macOS/Linux):**
 ```bash
 # Coming soon

@@ -239,6 +239,37 @@ function extractArchive(archivePath, destDir, isWindows) {
   }
 }
 
+// Fix macOS code signature issue
+function fixMacOSCodeSignature(binaryPath) {
+  logInfo('Fixing macOS code signature...');
+  
+  try {
+    // Method 1: Try to remove quarantine attribute
+    try {
+      execSync(`xattr -d com.apple.quarantine "${binaryPath}" 2>/dev/null`, { stdio: 'ignore' });
+      logInfo('✓ Removed quarantine attribute');
+    } catch (e) {
+      // Quarantine attribute may not exist, continue
+      logDebug('No quarantine attribute to remove');
+    }
+
+    // Method 2: Try ad-hoc code signing
+    try {
+      execSync(`codesign -s - "${binaryPath}" 2>/dev/null`, { stdio: 'ignore' });
+      logInfo('✓ Applied ad-hoc code signature');
+    } catch (e) {
+      // codesign may fail, but that's ok if quarantine removal worked
+      logDebug('Ad-hoc signing skipped (may require manual approval)');
+    }
+
+    logInfo('macOS security fix applied');
+  } catch (error) {
+    // Don't fail installation if this doesn't work
+    logWarning('Could not automatically fix macOS security settings');
+    logWarning('If the app fails to start, run: xattr -d com.apple.quarantine ' + binaryPath);
+  }
+}
+
 // Main installation function
 async function install() {
   console.log('');
@@ -291,6 +322,11 @@ async function install() {
       fs.chmodSync(binaryPath, 0o755);
     }
 
+    // Fix macOS code signature issue
+    if (platform === 'darwin') {
+      fixMacOSCodeSignature(binaryPath);
+    }
+
     // Cleanup archive
     fs.unlinkSync(archivePath);
 
@@ -301,6 +337,17 @@ async function install() {
     console.log('  1. Run: browserwing --port 8080');
     console.log('  2. Open: http://localhost:8080');
     console.log('');
+    
+    // macOS specific notice
+    if (platform === 'darwin') {
+      console.log(colors.yellow + '⚠️  macOS Users:' + colors.reset);
+      console.log('  If the app fails to start, run this command:');
+      console.log('  xattr -d com.apple.quarantine $(which browserwing)');
+      console.log('');
+      console.log('  See: https://github.com/' + REPO + '/blob/main/docs/MACOS_INSTALLATION_FIX.md');
+      console.log('');
+    }
+    
     console.log('Documentation: https://github.com/' + REPO);
     console.log('中文文档: https://gitee.com/browserwing/browserwing');
     console.log('');

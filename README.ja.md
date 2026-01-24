@@ -36,6 +36,13 @@ chmod +x ./browserwing
 ./browserwing.exe --port 8080
 ```
 
+**⚠️ macOS ユーザーへ：**  
+実行時に "killed" エラーが発生した場合は、以下のコマンドで修正してください：
+```bash
+xattr -d com.apple.quarantine $(which browserwing)
+```
+詳細は [macOS インストール修正ガイド](docs/MACOS_INSTALLATION_FIX.md) をご覧ください。
+
 ### 方法 B — ソースからビルド
 
 ```bash
