@@ -3349,7 +3349,7 @@ func (h *Handler) ExecutorHelp(c *gin.Context) {
 					"type":        "string",
 					"required":    true,
 					"description": "Input element identifier",
-					"example":     "#email-input or Input Element [1]",
+					"example":     "@e3 or #email-input",
 				},
 				"text": map[string]interface{}{
 					"type":        "string",
@@ -3897,18 +3897,18 @@ func (h *Handler) ExecutorHelp(c *gin.Context) {
 		},
 		"workflow": []string{
 			"1. Call GET /snapshot to understand page structure",
-			"2. Use element indices ([1], [2]) or CSS selectors for operations",
+			"2. Use element RefIDs (@e1, @e2) or CSS selectors for operations",
 			"3. Call appropriate operation endpoints (navigate, click, type, etc.)",
 			"4. Extract data using /extract endpoint",
 			"5. Use /batch for multiple operations",
 		},
 		"element_identifiers": map[string]interface{}{
-			"css_selector":        "#id, .class, button[type='submit']",
-			"xpath":               "//button[@id='login']",
-			"text_content":        "Login, Sign Up (will find button/link with this text)",
-			"accessibility_index": "[1], Clickable Element [1], Input Element [2]",
-			"aria_label":          "Searches for elements with aria-label attribute",
-			"recommendation":      "Use /snapshot first to get element indices",
+			"refid":          "@e1, @e2, @e3 (from /snapshot, recommended)",
+			"css_selector":   "#id, .class, button[type='submit']",
+			"xpath":          "//button[@id='login'], //a[contains(text(), 'Login')]",
+			"text_content":   "Login, Sign Up (will find button/link with this text)",
+			"aria_label":     "Searches for elements with aria-label attribute",
+			"recommendation": "Use /snapshot first to get RefIDs (@e1, @e2, etc.)",
 		},
 		"commands": commands,
 		"examples": map[string]interface{}{
@@ -3930,7 +3930,7 @@ func (h *Handler) ExecutorHelp(c *gin.Context) {
 						"step":     3,
 						"action":   "Click button",
 						"endpoint": "POST /click",
-						"payload":  map[string]interface{}{"identifier": "[1]"},
+						"payload":  map[string]interface{}{"identifier": "@e1"},
 					},
 				},
 			},
@@ -4999,8 +4999,8 @@ func generateExecutorSkillMD(host string) string {
 
 	// 元素交互类
 	sb.WriteString("### Element Interaction\n")
-	sb.WriteString("- `POST /click` - Click element (supports: CSS selector, semantic index `[1]`, text content)\n")
-	sb.WriteString("- `POST /type` - Type text into input (supports: `Input Element [1]`, CSS selector)\n")
+	sb.WriteString("- `POST /click` - Click element (supports: RefID `@e1`, CSS selector, XPath, text content)\n")
+	sb.WriteString("- `POST /type` - Type text into input (supports: RefID `@e3`, CSS selector, XPath)\n")
 	sb.WriteString("- `POST /select` - Select dropdown option\n")
 	sb.WriteString("- `POST /hover` - Hover over element\n")
 	sb.WriteString("- `POST /wait` - Wait for element state (visible, hidden, enabled)\n")
@@ -5043,19 +5043,21 @@ func generateExecutorSkillMD(host string) string {
 	// 元素定位方式
 	sb.WriteString("## Element Identification\n\n")
 	sb.WriteString("You can identify elements using:\n\n")
-	sb.WriteString("1. **Accessibility Index (Recommended):** `[1]`, `[2]`, `Clickable Element [1]`, `Input Element [2]`\n")
-	sb.WriteString("   - Most reliable method\n")
-	sb.WriteString("   - Get indices from `/snapshot` endpoint\n")
-	sb.WriteString("   - Example: `\"identifier\": \"[1]\"` or `\"identifier\": \"Input Element [1]\"`\n\n")
+	sb.WriteString("1. **RefID (Recommended):** `@e1`, `@e2`, `@e3`\n")
+	sb.WriteString("   - Most reliable method - stable across page changes\n")
+	sb.WriteString("   - Get RefIDs from `/snapshot` endpoint\n")
+	sb.WriteString("   - Valid for 5 minutes after snapshot\n")
+	sb.WriteString("   - Example: `\"identifier\": \"@e1\"`\n")
+	sb.WriteString("   - Works with multi-strategy fallback for robustness\n\n")
 	sb.WriteString("2. **CSS Selector:** `#id`, `.class`, `button[type=\"submit\"]`\n")
 	sb.WriteString("   - Standard CSS selectors\n")
 	sb.WriteString("   - Example: `\"identifier\": \"#login-button\"`\n\n")
-	sb.WriteString("3. **Text Content:** `Login`, `Sign Up`, `Submit`\n")
+	sb.WriteString("3. **XPath:** `//button[@id='login']`, `//a[contains(text(), 'Submit')]`\n")
+	sb.WriteString("   - XPath expressions for complex queries\n")
+	sb.WriteString("   - Example: `\"identifier\": \"//button[@id='login']\"`\n\n")
+	sb.WriteString("4. **Text Content:** `Login`, `Sign Up`, `Submit`\n")
 	sb.WriteString("   - Searches buttons and links with matching text\n")
 	sb.WriteString("   - Example: `\"identifier\": \"Login\"`\n\n")
-	sb.WriteString("4. **XPath:** `//button[@id='login']`\n")
-	sb.WriteString("   - XPath expressions\n")
-	sb.WriteString("   - Example: `\"identifier\": \"//button[@id='login']\"`\n\n")
 	sb.WriteString("5. **ARIA Label:** Elements with `aria-label` attribute\n")
 	sb.WriteString("   - Automatically searched\n\n")
 
@@ -5065,8 +5067,9 @@ func generateExecutorSkillMD(host string) string {
 	sb.WriteString("- Call `GET /help` if you're unsure about available commands or their parameters\n")
 	sb.WriteString("- Ensure browser is started (if not, it will auto-start on first operation)\n\n")
 	sb.WriteString("**During automation:**\n")
-	sb.WriteString("- **Always call `/snapshot` after navigation** to get page structure\n")
-	sb.WriteString("- **Prefer accessibility indices** (like `[1]`) over CSS selectors for reliability\n")
+	sb.WriteString("- **Always call `/snapshot` after navigation** to get page structure and RefIDs\n")
+	sb.WriteString("- **Prefer RefIDs** (like `@e1`) over CSS selectors for reliability and stability\n")
+	sb.WriteString("- **Re-snapshot after page changes** to get updated RefIDs\n")
 	sb.WriteString("- **Use `/wait`** for dynamic content that loads asynchronously\n")
 	sb.WriteString("- **Check element states** before interaction (visible, enabled)\n")
 	sb.WriteString("- **Use `/batch`** for multiple sequential operations to improve efficiency\n\n")
@@ -5100,27 +5103,30 @@ func generateExecutorSkillMD(host string) string {
 	sb.WriteString("```\n")
 	sb.WriteString("Response:\n")
 	sb.WriteString("```\n")
-	sb.WriteString("Input Element [1]: Username\n")
-	sb.WriteString("Input Element [2]: Password\n")
-	sb.WriteString("Clickable Element [1]: Login Button\n")
+	sb.WriteString("Clickable Elements:\n")
+	sb.WriteString("  @e1 Login (role: button)\n")
+	sb.WriteString("\n")
+	sb.WriteString("Input Elements:\n")
+	sb.WriteString("  @e2 Username (role: textbox)\n")
+	sb.WriteString("  @e3 Password (role: textbox)\n")
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("**Step 3:** Enter username\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("POST http://%s/api/v1/executor/type\n", host))
-	sb.WriteString("{\"identifier\": \"Input Element [1]\", \"text\": \"john\"}\n")
+	sb.WriteString("{\"identifier\": \"@e2\", \"text\": \"john\"}\n")
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("**Step 4:** Enter password\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("POST http://%s/api/v1/executor/type\n", host))
-	sb.WriteString("{\"identifier\": \"Input Element [2]\", \"text\": \"secret123\"}\n")
+	sb.WriteString("{\"identifier\": \"@e3\", \"text\": \"secret123\"}\n")
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("**Step 5:** Click login button\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString(fmt.Sprintf("POST http://%s/api/v1/executor/click\n", host))
-	sb.WriteString("{\"identifier\": \"Clickable Element [1]\"}\n")
+	sb.WriteString("{\"identifier\": \"@e1\"}\n")
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("**Step 6:** Wait for login success (optional)\n")
@@ -5187,10 +5193,10 @@ func generateExecutorSkillMD(host string) string {
 
 	sb.WriteString("### Form Filling\n")
 	sb.WriteString("1. Navigate to form page\n")
-	sb.WriteString("2. Get accessibility snapshot to find input elements\n")
-	sb.WriteString("3. Use `/type` for each field: `Input Element [1]`, `Input Element [2]`, etc.\n")
+	sb.WriteString("2. Get accessibility snapshot to find input elements and their RefIDs\n")
+	sb.WriteString("3. Use `/type` for each field: `@e1`, `@e2`, etc.\n")
 	sb.WriteString("4. Use `/select` for dropdowns\n")
-	sb.WriteString("5. Click submit button\n\n")
+	sb.WriteString("5. Click submit button using its RefID\n\n")
 
 	sb.WriteString("### Data Scraping\n")
 	sb.WriteString("1. Navigate to target page\n")
@@ -5208,10 +5214,10 @@ func generateExecutorSkillMD(host string) string {
 
 	sb.WriteString("### Login Automation\n")
 	sb.WriteString("1. Navigate to login page\n")
-	sb.WriteString("2. Get accessibility snapshot\n")
-	sb.WriteString("3. Type username: `Input Element [1]`\n")
-	sb.WriteString("4. Type password: `Input Element [2]`\n")
-	sb.WriteString("5. Click login button: `Clickable Element [1]`\n")
+	sb.WriteString("2. Get accessibility snapshot to find RefIDs\n")
+	sb.WriteString("3. Type username: `@e2`\n")
+	sb.WriteString("4. Type password: `@e3`\n")
+	sb.WriteString("5. Click login button: `@e1`\n")
 	sb.WriteString("6. Wait for success indicator\n\n")
 
 	// 重要提示
@@ -5249,9 +5255,9 @@ func generateExecutorSkillMD(host string) string {
 	sb.WriteString("# Get page structure\n")
 	sb.WriteString(fmt.Sprintf("GET %s/api/v1/executor/snapshot\n\n", host))
 	sb.WriteString("# Click element\n")
-	sb.WriteString(fmt.Sprintf("POST %s/api/v1/executor/click {\"identifier\": \"[1]\"}\n\n", host))
+	sb.WriteString(fmt.Sprintf("POST %s/api/v1/executor/click {\"identifier\": \"@e1\"}\n\n", host))
 	sb.WriteString("# Type text\n")
-	sb.WriteString(fmt.Sprintf("POST %s/api/v1/executor/type {\"identifier\": \"[1]\", \"text\": \"...\"}\n\n", host))
+	sb.WriteString(fmt.Sprintf("POST %s/api/v1/executor/type {\"identifier\": \"@e3\", \"text\": \"...\"}\n\n", host))
 	sb.WriteString("# Extract data\n")
 	sb.WriteString(fmt.Sprintf("POST %s/api/v1/executor/extract {\"selector\": \"...\", \"fields\": [...], \"multiple\": true}\n", host))
 	sb.WriteString("```\n\n")
