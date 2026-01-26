@@ -74,6 +74,8 @@ func SetupRouter(handler *Handler, agentHandler interface{}, frontendFS fs.FS, e
 			browserAPI.POST("/open", handler.OpenBrowserPage)
 			browserAPI.POST("/cookies/save", handler.SaveBrowserCookies)
 			browserAPI.POST("/cookies/import", handler.ImportBrowserCookies)
+			browserAPI.POST("/cookies/delete", handler.DeleteCookie)                // 删除单个cookie（使用name+domain+path标识）
+			browserAPI.POST("/cookies/batch/delete", handler.BatchDeleteCookies)    // 批量删除cookies
 
 			// 录制相关
 			browserAPI.POST("/record/start", handler.StartRecording)

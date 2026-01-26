@@ -288,6 +288,126 @@ func (h *Handler) GetCookies(c *gin.Context) {
 	c.JSON(http.StatusOK, cookieStore)
 }
 
+// DeleteCookie 删除单个Cookie
+func (h *Handler) DeleteCookie(c *gin.Context) {
+	var req struct {
+		ID     string `json:"id" binding:"required"`
+		Name   string `json:"name" binding:"required"`
+		Domain string `json:"domain" binding:"required"`
+		Path   string `json:"path" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error.invalidParams"})
+		return
+	}
+
+	// 获取现有的cookie store
+	cookieStore, err := h.db.GetCookies(req.ID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error.cookieNotFound"})
+		return
+	}
+
+	// 查找并删除匹配的cookie（通过 name + domain + path 唯一标识）
+	found := false
+	updatedCookies := make([]*proto.NetworkCookie, 0, len(cookieStore.Cookies))
+	for _, cookie := range cookieStore.Cookies {
+		if cookie.Name == req.Name && cookie.Domain == req.Domain && cookie.Path == req.Path {
+			found = true
+			continue // 跳过要删除的cookie
+		}
+		updatedCookies = append(updatedCookies, cookie)
+	}
+
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error.cookieNotFound"})
+		return
+	}
+
+	// 保存更新后的cookies
+	cookieStore.Cookies = updatedCookies
+	if err := h.db.SaveCookies(cookieStore); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error.deleteCookieFailed"})
+		return
+	}
+
+	logger.Info(c.Request.Context(), "Deleted cookie: %s (domain: %s, path: %s)", req.Name, req.Domain, req.Path)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success.cookieDeleted",
+		"count":   len(updatedCookies),
+	})
+}
+
+// BatchDeleteCookies 批量删除Cookies
+func (h *Handler) BatchDeleteCookies(c *gin.Context) {
+	type CookieIdentifier struct {
+		Name   string `json:"name" binding:"required"`
+		Domain string `json:"domain" binding:"required"`
+		Path   string `json:"path" binding:"required"`
+	}
+
+	var req struct {
+		ID      string             `json:"id" binding:"required"`
+		Cookies []CookieIdentifier `json:"cookies" binding:"required"` // 要删除的cookie标识列表（name+domain+path）
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error.invalidParams"})
+		return
+	}
+
+	if len(req.Cookies) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error.invalidParams"})
+		return
+	}
+
+	// 获取现有的cookie store
+	cookieStore, err := h.db.GetCookies(req.ID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error.cookieNotFound"})
+		return
+	}
+
+	// 构建要删除的cookie的集合（使用 name+domain+path 作为key）
+	deleteSet := make(map[string]bool)
+	for _, ci := range req.Cookies {
+		key := ci.Name + "|" + ci.Domain + "|" + ci.Path
+		deleteSet[key] = true
+	}
+
+	// 过滤掉要删除的cookies
+	updatedCookies := make([]*proto.NetworkCookie, 0, len(cookieStore.Cookies))
+	deletedCount := 0
+	for _, cookie := range cookieStore.Cookies {
+		key := cookie.Name + "|" + cookie.Domain + "|" + cookie.Path
+		if deleteSet[key] {
+			deletedCount++
+			continue // 跳过要删除的cookie
+		}
+		updatedCookies = append(updatedCookies, cookie)
+	}
+
+	if deletedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error.cookieNotFound"})
+		return
+	}
+
+	// 保存更新后的cookies
+	cookieStore.Cookies = updatedCookies
+	if err := h.db.SaveCookies(cookieStore); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error.deleteCookiesFailed"})
+		return
+	}
+
+	logger.Info(c.Request.Context(), "Batch deleted %d cookies", deletedCount)
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "success.cookiesDeleted",
+		"deleted_count": deletedCount,
+		"remaining":     len(updatedCookies),
+	})
+}
+
 // ============= 脚本录制和回放相关 API =============
 
 // StartRecording 开始录制操作

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
-import { ArrowLeft, Upload, Trash2, Edit2, Plus, Save, X, Search, Download } from 'lucide-react'
+import { ArrowLeft, Upload, Trash2, Edit2, Plus, Save, X, Search, Download, CheckSquare, Square } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -39,10 +39,23 @@ export default function CookieManager() {
   const [editingCookie, setEditingCookie] = useState<Cookie | null>(null)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; cookieName: string | null }>({ 
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; cookie: Cookie | null }>({ 
     show: false, 
-    cookieName: null 
+    cookie: null 
   })
+  const [selectedCookies, setSelectedCookies] = useState<Set<string>>(new Set()) // 存储cookie的唯一key: name|domain|path
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+
+  // 生成cookie的唯一标识
+  const getCookieKey = (cookie: Cookie) => {
+    return `${cookie.name}|${cookie.domain}|${cookie.path}`
+  }
+
+  // 从key解析cookie标识信息
+  const parseCookieKey = (key: string): { name: string; domain: string; path: string } => {
+    const [name, domain, path] = key.split('|')
+    return { name, domain, path }
+  }
 
   const showMessage = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setMessage(msg)
@@ -174,20 +187,59 @@ export default function CookieManager() {
   }
 
   const handleDeleteCookie = async () => {
-    if (!deleteConfirm.cookieName) return
+    if (!deleteConfirm.cookie) return
 
     try {
-      const existingCookies = cookieStore?.cookies || []
-      const updatedCookies = existingCookies.filter(c => 
-        c.name !== deleteConfirm.cookieName
-      )
-
-      await api.importBrowserCookies({ cookies: updatedCookies })
+      await api.deleteCookie({
+        id: 'browser',
+        name: deleteConfirm.cookie.name,
+        domain: deleteConfirm.cookie.domain,
+        path: deleteConfirm.cookie.path
+      })
       showMessage(t('cookie.messages.deleteSuccess'), 'success')
-      setDeleteConfirm({ show: false, cookieName: null })
+      setDeleteConfirm({ show: false, cookie: null })
       await loadCookies()
     } catch (err: any) {
       showMessage(err.response?.data?.error || t('cookie.messages.deleteError'), 'error')
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedCookies.size === 0) return
+
+    try {
+      // 将选中的key转换为cookie标识列表
+      const cookiesToDelete = Array.from(selectedCookies).map(key => parseCookieKey(key))
+      
+      await api.batchDeleteCookies({
+        id: 'browser',
+        cookies: cookiesToDelete
+      })
+      showMessage(t('cookie.messages.batchDeleteSuccess', { count: selectedCookies.size }), 'success')
+      setSelectedCookies(new Set())
+      setBatchDeleteConfirm(false)
+      await loadCookies()
+    } catch (err: any) {
+      showMessage(err.response?.data?.error || t('cookie.messages.deleteError'), 'error')
+    }
+  }
+
+  const handleSelectCookie = (cookie: Cookie) => {
+    const cookieKey = getCookieKey(cookie)
+    const newSelected = new Set(selectedCookies)
+    if (newSelected.has(cookieKey)) {
+      newSelected.delete(cookieKey)
+    } else {
+      newSelected.add(cookieKey)
+    }
+    setSelectedCookies(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedCookies.size === filteredCookies.length) {
+      setSelectedCookies(new Set())
+    } else {
+      setSelectedCookies(new Set(filteredCookies.map(c => getCookieKey(c))))
     }
   }
 
@@ -344,7 +396,26 @@ export default function CookieManager() {
 
       {/* Cookie List */}
       <div className="card">
-        <h2 className="text-lg lg:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-5">{t('cookie.list.title')}</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg lg:text-xl font-semibold text-gray-900 dark:text-gray-100">{t('cookie.list.title')}</h2>
+          {filteredCookies.length > 0 && (
+            <div className="flex items-center space-x-3">
+              {selectedCookies.size > 0 && (
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('cookie.list.selected', { count: selectedCookies.size })}
+                </span>
+              )}
+              <button
+                onClick={() => setBatchDeleteConfirm(true)}
+                disabled={selectedCookies.size === 0}
+                className="btn-secondary text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{t('cookie.action.batchDelete')}</span>
+              </button>
+            </div>
+          )}
+        </div>
         
         {filteredCookies.length === 0 ? (
           <div className="text-center py-12">
@@ -365,6 +436,19 @@ export default function CookieManager() {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                 <tr>
+                    <th className="px-4 py-3 w-12">
+                      <button
+                        onClick={handleSelectAll}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                        title={selectedCookies.size === filteredCookies.length ? t('cookie.action.deselectAll') : t('cookie.action.selectAll')}
+                      >
+                        {selectedCookies.size === filteredCookies.length ? (
+                          <CheckSquare className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('cookie.table.name')}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('cookie.table.domain')}</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('cookie.table.path')}</th>
@@ -374,8 +458,22 @@ export default function CookieManager() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredCookies.map((cookie, index) => (
-                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {filteredCookies.map((cookie) => {
+                  const cookieKey = getCookieKey(cookie)
+                  return (
+                  <tr key={cookieKey} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-4 py-3 w-12">
+                      <button
+                        onClick={() => handleSelectCookie(cookie)}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                      >
+                        {selectedCookies.has(cookieKey) ? (
+                          <CheckSquare className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                        ) : (
+                          <Square className="w-5 h-5 text-gray-400" />
+                        )}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                       {cookie.name}
                     </td>
@@ -415,7 +513,7 @@ export default function CookieManager() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => setDeleteConfirm({ show: true, cookieName: cookie.name })}
+                          onClick={() => setDeleteConfirm({ show: true, cookie })}
                           className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                           title={t('cookie.action.delete')}
                         >
@@ -424,7 +522,8 @@ export default function CookieManager() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )
+                })}
               </tbody>
             </table>
           </div>
@@ -632,14 +731,30 @@ export default function CookieManager() {
       )}
 
       {/* Delete Confirmation */}
-      {deleteConfirm.show && (
+      {deleteConfirm.show && deleteConfirm.cookie && (
         <ConfirmDialog
           title={t('cookie.deleteTitle')}
-          message={t('cookie.deleteConfirm', { name: deleteConfirm.cookieName || '' })}
+          message={t('cookie.deleteConfirm', { 
+            name: deleteConfirm.cookie.name,
+            domain: deleteConfirm.cookie.domain,
+            path: deleteConfirm.cookie.path
+          })}
           confirmText={t('common.delete')}
           cancelText={t('common.cancel')}
           onConfirm={handleDeleteCookie}
-          onCancel={() => setDeleteConfirm({ show: false, cookieName: null })}
+          onCancel={() => setDeleteConfirm({ show: false, cookie: null })}
+        />
+      )}
+
+      {/* Batch Delete Confirmation */}
+      {batchDeleteConfirm && (
+        <ConfirmDialog
+          title={t('cookie.batchDeleteTitle')}
+          message={t('cookie.batchDeleteConfirm', { count: selectedCookies.size })}
+          confirmText={t('common.delete')}
+          cancelText={t('common.cancel')}
+          onConfirm={handleBatchDelete}
+          onCancel={() => setBatchDeleteConfirm(false)}
         />
       )}
 

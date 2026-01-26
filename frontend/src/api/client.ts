@@ -590,6 +590,12 @@ export const api = {
   importBrowserCookies: (data: { cookies: any[] }) =>
     client.post<{ message: string; count: number }>('/browser/cookies/import', data),
 
+  deleteCookie: (data: { id: string; name: string; domain: string; path: string }) =>
+    client.post<{ message: string; count: number }>('/browser/cookies/delete', data),
+
+  batchDeleteCookies: (data: { id: string; cookies: Array<{ name: string; domain: string; path: string }> }) =>
+    client.post<{ message: string; deleted_count: number; remaining: number }>('/browser/cookies/batch/delete', data),
+
   // 浏览器实例管理
   createBrowserInstance: (data: Partial<BrowserInstance>) =>
     client.post<{ message: string; instance: BrowserInstance }>('/browser/instances', data),
