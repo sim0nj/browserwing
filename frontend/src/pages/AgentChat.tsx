@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Loader2, Bot, Wrench, CheckCircle2, XCircle, Trash2, MessageSquarePlus, Copy, Check, ChevronDown, StopCircle } from 'lucide-react'
+import { Send, Loader2, Bot, Wrench, CheckCircle2, XCircle, Trash2, MessageSquarePlus, Copy, Check, ChevronDown, StopCircle, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Toast from '../components/Toast'
 import MarkdownRenderer from '../components/MarkdownRenderer'
@@ -66,6 +66,8 @@ export default function AgentChat() {
   const [selectedLlmForNewSession, setSelectedLlmForNewSession] = useState<string>('')
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set())
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -80,6 +82,44 @@ export default function AgentChat() {
   useEffect(() => {
     scrollToBottom()
   }, [currentSession?.messages])
+
+  // 全屏模式：隐藏/显示 header 和 footer
+  useEffect(() => {
+    const header = document.querySelector('header')
+    const footer = document.querySelector('footer')
+    const main = document.querySelector('main')
+    
+    if (isFullscreen) {
+      if (header) header.style.display = 'none'
+      if (footer) footer.style.display = 'none'
+      if (main) {
+        main.style.maxWidth = '100%'
+        main.style.padding = '0'
+      }
+    } else {
+      if (header) header.style.display = ''
+      if (footer) footer.style.display = ''
+      if (main) {
+        main.style.maxWidth = ''
+        main.style.padding = ''
+      }
+    }
+
+    // 清理函数：确保组件卸载时恢复样式
+    return () => {
+      if (header) header.style.display = ''
+      if (footer) footer.style.display = ''
+      if (main) {
+        main.style.maxWidth = ''
+        main.style.padding = ''
+      }
+    }
+  }, [isFullscreen])
+
+  // 切换全屏
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+  }
 
   // 自动调整输入框高度
   useEffect(() => {
@@ -672,6 +712,332 @@ export default function AgentChat() {
   // 判断是否应该显示配置引导页面
   const shouldShowConfigGuide = llmConfigs.length === 0 && sessions.length === 0
 
+  // 全屏模式渲染
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-900 flex flex-col">
+        {/* 顶部工具栏 */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Bot className="w-6 h-6 text-gray-900 dark:text-gray-100" />
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('agentChat.title')}</h1>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* 显示当前会话使用的模型（只读） */}
+            {currentSession && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                <Bot className="w-4 h-4" />
+                <span>
+                  {currentSession.llm_config_id 
+                    ? (llmConfigs.find(c => c.id === currentSession.llm_config_id)?.model 
+                       || llmConfigs.find(c => c.name === currentSession.llm_config_id)?.model 
+                       || `${currentSession.llm_config_id.substring(0, 20)}...`)
+                    : t('agentChat.defaultModel') || '默认模型'}
+                </span>
+              </div>
+            )}
+            
+            {/* MCP 状态 */}
+            {mcpStatus && (
+              <button
+                onClick={() => navigate('/tools')}
+                className="flex items-center gap-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-2 rounded-lg transition-colors"
+              >
+                <div className={`w-2 h-2 rounded-full bg-green-400`} />
+                <span className="text-gray-400 dark:text-gray-500">
+                  {t('agentChat.tools')} ({mcpStatus.tool_count || 0})
+                </span>
+              </button>
+            )}
+
+            {/* 新建会话按钮 */}
+            <button
+              onClick={showCreateSessionDialog}
+              disabled={llmConfigs.filter(c => c && c.is_active).length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={llmConfigs.filter(c => c && c.is_active).length === 0 ? t('agentChat.noModelDesc') : ''}
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+              <span>{t('agentChat.newSession')}</span>
+            </button>
+
+            {/* 退出全屏按钮 */}
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title="退出全屏"
+            >
+              <Minimize2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 全屏主体区域 */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* 左侧会话列表 */}
+          {!isSidebarCollapsed ? (
+            <div className="w-64 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-y-auto flex-shrink-0">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-gray-400 dark:text-gray-500">{t('agentChat.sessionList')}</h2>
+                  <button
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    title="收起侧边栏"
+                  >
+                    <PanelLeftClose className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {sessions.filter(s => s && s.id).map(session => (
+                    <div
+                      key={session.id}
+                      className={`p-3 rounded-lg cursor-pointer transition-colors group ${
+                        currentSession?.id === session.id
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                      onClick={() => setCurrentSession(session)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {session.messages?.[0]?.content?.substring(0, 25) || '新会话'}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {session.messages?.length || 0} {t('agentChat.messages')}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteSession(session.id)
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="w-12 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col items-center py-4 flex-shrink-0">
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                title="展开侧边栏"
+              >
+                <PanelLeftOpen className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+          )}
+
+          {/* 右侧对话区域 */}
+          <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 min-h-0">
+            {currentSession ? (
+              <>
+                {/* 消息列表 */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                  <div className="max-w-3xl mx-auto space-y-6">
+                    {currentSession.messages.filter(m => m && m.id).map((message, index) => (
+                      <div
+                        key={message.id || `temp-${index}`}
+                        className={`flex ${
+                          message.role === 'user' ? 'justify-end' : 'justify-start'
+                        }`}
+                      >
+                        <div className="relative group max-w-2xl">
+                          <div
+                            className={`px-4 py-3 rounded-2xl ${message.role === 'user'
+                              ? 'bg-gray-900 dark:bg-gray-900 text-white'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                            }`}
+                          >
+                            {message.role === 'assistant' ? (
+                              <>
+                                {/* 工具调用说明和卡片 */}
+                                {message.tool_calls && message.tool_calls.length > 0 && (
+                                  <div className="space-y-3 mb-3">
+                                    {message.tool_calls.filter(tc => tc && tc.tool_name).map(tc => (
+                                      <div key={tc.tool_name}>
+                                        {tc.instructions && (
+                                          <div className="prose prose-sm dark:prose-invert max-w-none text-base">
+                                            {tc.instructions}
+                                          </div>
+                                        )}
+                                        {renderToolCall(tc, message.id || 'temp', true)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* 消息内容 - 支持 Markdown 渲染 */}
+                                {message.content ? (
+                                  <>
+                                    <MarkdownRenderer
+                                      content={message.content}
+                                      className="text-base"
+                                    />
+                                    {isStreaming && message.id === currentSession.messages[currentSession.messages.length - 1]?.id && (
+                                      <div className="flex items-center gap-1.5 mt-2">
+                                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></span>
+                                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.4s' }}></span>
+                                        <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.4s' }}></span>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : isStreaming ? (
+                                  <div className="flex items-center gap-1.5 py-3">
+                                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.4s' }}></span>
+                                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.4s' }}></span>
+                                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.4s' }}></span>
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : (
+                              <div className="whitespace-pre-wrap break-words text-base">
+                                {message.content}
+                              </div>
+                            )}
+
+                            <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                              {formatTime(message.timestamp)}
+                            </div>
+                          </div>
+
+                          {/* 复制按钮 */}
+                          {message.role === 'assistant' && message.content && (
+                            <button
+                              onClick={() => copyMessage(message.content, message.id)}
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 hover:bg-gray-50 dark:hover:bg-gray-600 transition-opacity shadow-sm"
+                              title={t('agentChat.copyMessage')}
+                            >
+                              {copiedMessageId === message.id ? (
+                                <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+
+                {/* 输入区域 */}
+                <div className="px-6 py-4 bg-white dark:bg-gray-800 flex-shrink-0 border-t border-gray-200 dark:border-gray-700">
+                  <div className="max-w-3xl mx-auto">
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 flex items-end gap-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-2">
+                        <textarea
+                          ref={textareaRef}
+                          value={inputMessage}
+                          onChange={(e) => setInputMessage(e.target.value)}
+                          onKeyPress={handleKeyPress}
+                          placeholder={t('agentChat.inputPlaceholder')}
+                          className="flex-1 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none outline-none py-2 leading-6 text-base overflow-y-auto"
+                          rows={1}
+                          style={{ minHeight: '24px', maxHeight: '240px' }}
+                          disabled={isStreaming}
+                        />
+                        <button
+                          onClick={isStreaming ? stopGeneration : sendMessage}
+                          disabled={!isStreaming && !inputMessage.trim()}
+                          className="flex-shrink-0 p-2 bg-gray-900 dark:bg-gray-700 text-white rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-1"
+                          title={isStreaming ? t('agentChat.stopGeneration') : t('agentChat.send')}
+                        >
+                          {isStreaming ? (
+                            <StopCircle className="w-5 h-5" />
+                          ) : (
+                            <Send className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-2 text-center">
+                      {t('agentChat.disclaimer')}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                <div className="text-center">
+                  <Bot className="w-16 h-16 mx-auto mb-4 opacity-30 text-gray-300 dark:text-gray-600" />
+                  <p className="text-lg">{t('agentChat.noSession')}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 新建会话对话框 */}
+        {showNewSessionDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div ref={newSessionDialogRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                选择模型
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                会话创建后将使用选定的模型，无法更改
+              </p>
+              
+              <div className="space-y-2 mb-6">
+                {llmConfigs.filter(c => c && c.id && c.is_active).map(config => (
+                  <button
+                    key={config.id}
+                    onClick={() => setSelectedLlmForNewSession(config.id)}
+                    className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+                      selectedLlmForNewSession === config.id
+                        ? 'border-gray-900 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{config.model}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{config.provider}</div>
+                  </button>
+                ))}
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNewSessionDialog(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => createSession(selectedLlmForNewSession)}
+                  disabled={!selectedLlmForNewSession}
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-800 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  创建会话
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast 提示 */}
+        {showToast && (
+          <Toast
+            message={toastMessage}
+            type={toastType}
+            onClose={() => setShowToast(false)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // 非全屏模式渲染（原有布局）
   return (
     <div className="border border-gray-300 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-900 h-[calc(100vh-11rem)] overflow-hidden">
       {/* 顶部状态栏 */}
@@ -718,6 +1084,15 @@ export default function AgentChat() {
           >
             <MessageSquarePlus className="w-4 h-4" />
             <span>{t('agentChat.newSession')}</span>
+          </button>
+
+          {/* 全屏按钮 */}
+          <button
+            onClick={toggleFullscreen}
+            className="flex items-center gap-2 px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            title="全屏模式"
+          >
+            <Maximize2 className="w-5 h-5" />
           </button>
         </div>
       </div>
