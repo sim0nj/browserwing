@@ -1457,13 +1457,13 @@ export default function ScriptManager() {
             </p>
           </div>
           {activeTab === 'scripts' && (
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowRecordingConfig(true)}
-                className="btn-secondary flex items-center space-x-2"
+                className="btn-secondary flex items-center space-x-1.5"
                 disabled={loading}
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <span>{t('script.recordingConfig.title')}</span>
@@ -1473,12 +1473,12 @@ export default function ScriptManager() {
                 <button
                   ref={importButtonRef}
                   onClick={() => setShowImportMenu(!showImportMenu)}
-                  className="btn-secondary flex items-center space-x-2"
+                  className="btn-secondary flex items-center space-x-1.5"
                   disabled={loading}
                 >
-                  <Upload className="w-5 h-5" />
+                  <Upload className="w-3.5 h-3.5" />
                   <span>{t('script.import')}</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${showImportMenu ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showImportMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showImportMenu && (
                   <div ref={importMenuRef} className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50">
@@ -1509,27 +1509,27 @@ export default function ScriptManager() {
               </div>
               <button
                 onClick={loadScripts}
-                className="btn-secondary flex items-center space-x-2"
+                className="btn-secondary flex items-center space-x-1.5"
                 disabled={loading}
               >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>{t('common.refresh')}</span>
               </button>
               <button
                 onClick={() => setShowTutorial(true)}
-                className="btn-secondary flex items-center space-x-2"
+                className="btn-secondary flex items-center space-x-1.5"
                 disabled={loading}
               >
-                <HelpCircle className="w-5 h-5" />
+                <HelpCircle className="w-3.5 h-3.5" />
                 <span>{t('script.tutorial.title')}</span>
               </button>
               <a
                 href={language.startsWith('zh-') ? 'https://browserwing.com/zh/scripts' : 'https://browserwing.com/scripts'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-secondary flex items-center space-x-2"
+                className="btn-secondary flex items-center space-x-1.5"
               >
-                <ExternalLink className="w-5 h-5" />
+                <ExternalLink className="w-3.5 h-3.5" />
                 <span>{t('script.marketplace')}</span>
               </a>
             </div>
@@ -1537,10 +1537,10 @@ export default function ScriptManager() {
           {activeTab === 'executions' && (
             <button
               onClick={loadExecutions}
-              className="btn-secondary flex items-center space-x-2"
+              className="btn-secondary flex items-center space-x-1.5"
               disabled={loading}
             >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>{t('common.refresh')}</span>
             </button>
           )}
