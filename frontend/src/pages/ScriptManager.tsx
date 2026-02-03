@@ -122,6 +122,11 @@ export default function ScriptManager() {
   const [newVariableName, setNewVariableName] = useState('')
   const [newVariableValue, setNewVariableValue] = useState('')
 
+  // 悬浮工具栏相关
+  const [showFloatingToolbar, setShowFloatingToolbar] = useState(false)
+  const [showFloatingAddActionMenu, setShowFloatingAddActionMenu] = useState(false)
+  const actionButtonsRef = useRef<HTMLDivElement>(null)
+
   const showMessage = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'info') => {
     setMessage(msg)
     setToastType(type)
@@ -180,6 +185,31 @@ export default function ScriptManager() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showExportMenu])
+
+  // 监听滚动，决定是否显示悬浮工具栏
+  useEffect(() => {
+    const handleScroll = () => {
+      if (editingScript && actionButtonsRef.current) {
+        const rect = actionButtonsRef.current.getBoundingClientRect()
+        // 当原始按钮位置滚动到视窗上方时，显示悬浮工具栏
+        setShowFloatingToolbar(rect.top < 0)
+      } else {
+        setShowFloatingToolbar(false)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [editingScript])
+
+  // 当编辑脚本状态改变时，重置悬浮工具栏状态
+  useEffect(() => {
+    if (!editingScript) {
+      setShowFloatingToolbar(false)
+    }
+  }, [editingScript])
 
   const loadRecordingConfig = async () => {
     try {
@@ -1276,6 +1306,99 @@ export default function ScriptManager() {
 
   return (
     <div className="space-y-6 lg:space-y-8 animate-fade-in">
+      {/* 悬浮工具栏 */}
+      {showFloatingToolbar && editingScript && (
+        <div className="fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-lg z-50 animate-slide-down">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('script.editor.editing')}: {editingScript.name}
+              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <button
+                  onClick={() => setShowFloatingAddActionMenu(!showFloatingAddActionMenu)}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{t('script.editor.addAction')}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showFloatingAddActionMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showFloatingAddActionMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowFloatingAddActionMenu(false)} />
+                    <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-20 max-h-96 overflow-y-auto">
+                      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('script.action.category.basic')}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => { handleAddAction('click'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Click</button>
+                          <button onClick={() => { handleAddAction('input'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Input</button>
+                          <button onClick={() => { handleAddAction('select'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Select</button>
+                          <button onClick={() => { handleAddAction('navigate'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Navigate</button>
+                        </div>
+                      </div>
+                      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('script.action.category.waitScroll')}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => { handleAddAction('wait'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Wait</button>
+                          <button onClick={() => { handleAddAction('sleep'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Sleep</button>
+                          <button onClick={() => { handleAddAction('scroll'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Scroll</button>
+                        </div>
+                      </div>
+                      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('script.action.category.extract')}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => { handleAddAction('extract_text'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Extract Text</button>
+                          <button onClick={() => { handleAddAction('extract_html'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Extract HTML</button>
+                          <button onClick={() => { handleAddAction('extract_attribute'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors col-span-2">Extract Attribute</button>
+                        </div>
+                      </div>
+                      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('script.action.category.advanced')}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => { handleAddAction('execute_js'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Execute JS</button>
+                          <button onClick={() => { handleAddAction('upload_file'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Upload File</button>
+                          <button onClick={() => { handleAddAction('keyboard'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">Keyboard</button>
+                        </div>
+                      </div>
+                      <div className="px-3 py-2">
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{t('script.action.category.tabs')}</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button onClick={() => { handleAddAction('open_tab'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">{t('script.action.openTab')}</button>
+                          <button onClick={() => { handleAddAction('switch_tab'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">{t('script.action.switchTab')}</button>
+                          <button onClick={() => { handleAddAction('switch_active_tab'); setShowFloatingAddActionMenu(false); }} className="px-3 py-2 text-xs text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors">{t('script.action.switchActiveTab')}</button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleSaveEditedScript}
+                disabled={loading}
+                className="flex items-center space-x-1 px-4 py-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+              >
+                <Check className="w-4 h-4" />
+                <span>{t('script.card.saveEdit')}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setEditingScript(null)
+                  setEditingActions([])
+                }}
+                disabled={loading}
+                className="flex items-center space-x-1 px-4 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors shadow-sm"
+              >
+                <X className="w-4 h-4" />
+                <span>{t('script.card.cancelEdit')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -1881,7 +2004,7 @@ export default function ScriptManager() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center space-x-2 ml-4">
+                            <div className="flex items-center space-x-2 ml-4" ref={isEditing ? actionButtonsRef : null}>
                               <button
                                 onClick={() => toggleScriptExpand(script.id)}
                                 className="p-2 text-gray-600 hover:bg-gray-200 rounded transition-colors"

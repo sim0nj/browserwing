@@ -90,6 +90,22 @@
     animation: slideInRight 0.3s ease-out;
   }
 
+  /* 悬浮工具栏向下滑入动画 */
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-down {
+    animation: slideDown 0.3s ease-out;
+  }
+
   /* 自定义滚动条 */
   .overflow-y-auto::-webkit-scrollbar {
     width: 6px;
