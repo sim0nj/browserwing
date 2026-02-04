@@ -928,7 +928,8 @@ export const translations = {
     'browser.config.deleteError': '删除失败',
     'browser.config.nameRequired': '请输入配置名称',
     'browser.config.proxy': '代理地址',
-    'browser.config.proxyPlaceholder': '例如: http://127.0.0.1:7890',
+    'browser.config.proxyPlaceholder': 'http://127.0.0.1:7890 或 socks5://127.0.0.1:1080',
+    'browser.config.proxyHint': '支持 HTTP/HTTPS 和 SOCKS5 代理。带认证：http://user:pass@ip:port 或 socks5://user:pass@ip:port',
     // 浏览器实例管理
     'browser.instance.title': '浏览器实例管理',
     'browser.instance.manage': '管理实例',
@@ -2035,7 +2036,8 @@ export const translations = {
     'browser.config.deleteError': '刪除失敗',
     'browser.config.nameRequired': '請輸入配置名稱',
     'browser.config.proxy': '代理地址',
-    'browser.config.proxyPlaceholder': '例如: http://127.0.0.1:7890',
+    'browser.config.proxyPlaceholder': 'http://127.0.0.1:7890 或 socks5://127.0.0.1:1080',
+    'browser.config.proxyHint': '支持 HTTP/HTTPS 和 SOCKS5 代理。帶認證：http://user:pass@ip:port 或 socks5://user:pass@ip:port',
     'browser.messages.recordingStopped': '錄製已停止',
 
     // 瀏覽器實例管理
@@ -3284,7 +3286,8 @@ export const translations = {
     'browser.config.deleteError': 'Failed to delete',
     'browser.config.nameRequired': 'Please enter configuration name',
     'browser.config.proxy': 'Proxy Address',
-    'browser.config.proxyPlaceholder': 'e.g.: http://127.0.0.1:7890',
+    'browser.config.proxyPlaceholder': 'http://127.0.0.1:7890 or socks5://127.0.0.1:1080',
+    'browser.config.proxyHint': 'Supports HTTP/HTTPS and SOCKS5 proxies. With auth: http://user:pass@ip:port or socks5://user:pass@ip:port',
     // Browser Instance Management
     'browser.instance.title': 'Browser Instance Management',
     'browser.instance.manage': 'Manage Instances',
@@ -4429,8 +4432,9 @@ export const translations = {
     'browser.config.deleteSuccess': 'Configuración eliminada exitosamente',
     'browser.config.deleteError': 'Error al eliminar',
     'browser.config.nameRequired': 'Por favor ingrese el nombre de configuración',
-    'browser.config.proxy': 'Dirección de Proxy (HTTP/HTTPS)',
-    'browser.config.proxyPlaceholder': 'ej.: http://127.0.0.1:7890',
+    'browser.config.proxy': 'Dirección de Proxy (HTTP/HTTPS/SOCKS5)',
+    'browser.config.proxyPlaceholder': 'http://127.0.0.1:7890 o socks5://127.0.0.1:1080',
+    'browser.config.proxyHint': 'Soporta proxies HTTP/HTTPS y SOCKS5. Con autenticación: http://user:pass@ip:port o socks5://user:pass@ip:port',
     'browser.messages.recordingStopped': 'La grabación se detuvo automáticamente debido a la detención del navegador',
 
     // Gestión de Instancias del Navegador
@@ -5623,7 +5627,8 @@ export const translations = {
     'browser.config.deleteError': '削除に失敗しました',
     'browser.config.nameRequired': '設定名を入力してください',
     'browser.config.proxy': 'プロキシアドレス',
-    'browser.config.proxyPlaceholder': '例: http://127.0.0.1:7890',
+    'browser.config.proxyPlaceholder': 'http://127.0.0.1:7890 または socks5://127.0.0.1:1080',
+    'browser.config.proxyHint': 'HTTP/HTTPS および SOCKS5 プロキシをサポート。認証付き: http://user:pass@ip:port または socks5://user:pass@ip:port',
     'browser.messages.recordingStopped': '録画が手動で停止されました',
 
     // ブラウザインスタンス管理

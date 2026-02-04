@@ -211,71 +211,70 @@ export default function BrowserInstanceManager() {
   return (
     <div className="space-y-6 lg:space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => navigate('/browser')}
-              className="btn-ghost p-2"
-              title={t('common.back')}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              {t('browser.instance.title')}
-            </h2>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={loadInstances}
-              className="btn-ghost p-2"
-              title={t('common.refresh')}
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              onClick={openCreateModal}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span>{t('browser.instance.create')}</span>
-            </button>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {t('browser.instance.title')}
+          </h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            {t('browser.instance.manage')}
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => navigate('/browser')}
+            className="btn-secondary flex items-center space-x-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{t('common.back')}</span>
+          </button>
+          <button
+            onClick={loadInstances}
+            disabled={loading}
+            className="btn-secondary flex items-center space-x-1.5"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>{t('common.refresh')}</span>
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="btn-secondary flex items-center space-x-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{t('browser.instance.create')}</span>
+          </button>
         </div>
       </div>
 
       {/* Instance List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {instances.map((instance) => (
           <div
             key={instance.id}
-            className={`card ${instance.id === currentInstanceId ? 'ring-2 ring-gray-900 dark:ring-gray-100' : ''}`}
+            className={`bg-white dark:bg-gray-800 rounded-lg border transition-colors ${
+              instance.id === currentInstanceId 
+                ? 'border-gray-900 dark:border-gray-100 shadow-sm' 
+                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-2">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            {/* 头部：标题和操作按钮 */}
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate mb-2">
                     {instance.name}
                   </h3>
-                  {instance.is_default && (
-                    <span className="px-2 py-0.5 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded-full">
-                      {t('browser.instance.default')}
-                    </span>
-                  )}
-                  {instance.id === currentInstanceId && (
-                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                      {t('browser.instance.current')}
-                    </span>
-                  )}
-                </div>
-                {instance.description && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    {instance.description}
-                  </p>
-                )}
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">{t('browser.instance.type')}:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {instance.is_default && (
+                      <span className="px-2 py-0.5 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded-full">
+                        {t('browser.instance.default')}
+                      </span>
+                    )}
+                    {instance.id === currentInstanceId && (
+                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
+                        {t('browser.instance.current')}
+                      </span>
+                    )}
                     <span className={`px-2 py-0.5 rounded-full text-xs ${
                       instance.type === 'local' 
                         ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
@@ -283,9 +282,6 @@ export default function BrowserInstanceManager() {
                     }`}>
                       {t(`browser.instance.${instance.type}`)}
                     </span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">{t('browser.instance.status')}:</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs ${
                       instance.is_active 
                         ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
@@ -294,73 +290,84 @@ export default function BrowserInstanceManager() {
                       {instance.is_active ? t('browser.instance.running') : t('browser.instance.stopped')}
                     </span>
                   </div>
-                  {instance.type === 'local' && instance.user_data_dir && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      <span className="font-medium">{t('browser.instance.userDataDir')}:</span> {instance.user_data_dir}
-                    </div>
-                  )}
-                  {instance.type === 'remote' && instance.control_url && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      <span className="font-medium">{t('browser.instance.controlUrl')}:</span> {instance.control_url}
-                    </div>
+                </div>
+                <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                  <button
+                    onClick={() => openEditModal(instance)}
+                    disabled={instance.is_active}
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={t('browser.instance.edit')}
+                  >
+                    <Edit className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  </button>
+                  {!instance.is_default && !instance.is_active && (
+                    <button
+                      onClick={() => setDeleteConfirm({ show: true, instanceId: instance.id })}
+                      className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      title={t('browser.instance.delete')}
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    </button>
                   )}
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-              {!instance.is_active ? (
-                <button
-                  onClick={() => handleStartInstance(instance.id)}
-                  className="btn-secondary flex items-center space-x-2 flex-1"
-                >
-                  <Power className="w-4 h-4" />
-                  <span>{t('browser.instance.start')}</span>
-                </button>
-              ) : (
-                <>
-                  {instance.id !== currentInstanceId && (
-                    <button
-                      onClick={() => handleSwitchInstance(instance.id)}
-                      className="btn-secondary flex items-center space-x-2 flex-1"
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>{t('browser.instance.switch')}</span>
-                    </button>
-                  )}
+              {instance.description && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
+                  {instance.description}
+                </p>
+              )}
+
+              {/* 路径信息 */}
+              {instance.type === 'local' && instance.user_data_dir && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate mb-3">
+                  <span className="font-medium">{t('browser.instance.userDataDir')}:</span> {instance.user_data_dir}
+                </div>
+              )}
+              {instance.type === 'remote' && instance.control_url && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 truncate mb-3">
+                  <span className="font-medium">{t('browser.instance.controlUrl')}:</span> {instance.control_url}
+                </div>
+              )}
+
+              {/* 主操作按钮 */}
+              <div className="flex gap-2">
+                {!instance.is_active ? (
                   <button
-                    onClick={() => handleStopInstance(instance.id)}
-                    className="btn-danger flex items-center space-x-2 flex-1"
+                    onClick={() => handleStartInstance(instance.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 text-white dark:text-gray-900 rounded-md transition-colors"
                   >
-                    <PowerOff className="w-4 h-4" />
-                    <span>{t('browser.instance.stop')}</span>
+                    <Power className="w-3.5 h-3.5" />
+                    <span>{t('browser.instance.start')}</span>
                   </button>
-                </>
-              )}
-              <button
-                onClick={() => openEditModal(instance)}
-                disabled={instance.is_active}
-                className="btn-ghost p-2"
-                title={t('browser.instance.edit')}
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-              {!instance.is_default && !instance.is_active && (
-                <button
-                  onClick={() => setDeleteConfirm({ show: true, instanceId: instance.id })}
-                  className="btn-ghost p-2 text-red-600 hover:bg-red-50"
-                  title={t('browser.instance.delete')}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
+                ) : (
+                  <>
+                    {instance.id !== currentInstanceId && (
+                      <button
+                        onClick={() => handleSwitchInstance(instance.id)}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md transition-colors"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>{t('browser.instance.switch')}</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleStopInstance(instance.id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md transition-colors"
+                    >
+                      <PowerOff className="w-3.5 h-3.5" />
+                      <span>{t('browser.instance.stop')}</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       {instances.length === 0 && !loading && (
-        <div className="card text-center py-12">
+        <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             {t('browser.instance.noInstances')}
           </p>
@@ -504,8 +511,11 @@ export default function BrowserInstanceManager() {
                     value={instanceForm.proxy}
                     onChange={(e) => setInstanceForm({ ...instanceForm, proxy: e.target.value })}
                     placeholder={t('browser.config.proxyPlaceholder')}
-                    className="input w-full"
+                    className="input w-full font-mono text-sm"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {t('browser.config.proxyHint')}
+                  </p>
                 </div>
 
                 {/* Headless */}

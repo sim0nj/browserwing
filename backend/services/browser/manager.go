@@ -1680,11 +1680,11 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 		}
 		return fmt.Errorf("failed to connect browser: %w", err)
 	}
-	
+
 	// 关键：在浏览器连接后立即设置XHR拦截器，确保所有页面（包括后续打开的）都会自动监听XHR
 	// 这样用户在点击"开始录制"之前打开的页面，也能捕获到XHR请求
 	logger.Info(ctx, "Setting up XHR interceptor for all pages...")
-	
+
 	// 获取所有现有页面并注入XHR拦截器
 	pages, err := browser.Pages()
 	if err == nil {
@@ -1695,7 +1695,7 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 				if evalErr != nil {
 					logger.Warn(ctx, "Failed to set EvalOnNewDocument for existing page: %v", evalErr)
 				}
-				
+
 				// 立即在现有页面注入（以防页面已经加载）
 				_, injectErr := page.Eval(`() => { ` + xhrInterceptorScriptForManager + ` return true; }`)
 				if injectErr != nil {
@@ -1705,11 +1705,11 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 		}
 		logger.Info(ctx, "✓ XHR interceptor configured for %d existing pages", len(pages))
 	}
-	
+
 	// 为浏览器设置默认的EvalOnNewDocument（影响所有新页面）
 	// 注意：rod目前没有直接在Browser级别设置EvalOnNewDocument的API
 	// 所以我们需要在页面创建时处理，见下面的页面监听逻辑
-	
+
 	logger.Info(ctx, "✓ XHR interceptor setup completed")
 
 	// 设置下载行为
@@ -1773,7 +1773,7 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 		m.isRunning = true
 		m.startTime = runtime.startTime
 	}
-	
+
 	// 启动新页面监听，自动为新打开的页面注入XHR拦截器
 	go m.watchForNewPagesXHR(ctx, browser, instanceID)
 
@@ -1785,14 +1785,14 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 // 这确保了用户在点击"开始录制"之前打开的所有页面都能捕获XHR请求
 func (m *Manager) watchForNewPagesXHR(ctx context.Context, browser *rod.Browser, instanceID string) {
 	logger.Info(ctx, "Starting XHR interceptor watcher for instance: %s", instanceID)
-	
+
 	// 记录已处理的页面
 	processedPages := make(map[string]bool)
-	
+
 	// 定时检查新页面（每秒检查一次）
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -1800,36 +1800,36 @@ func (m *Manager) watchForNewPagesXHR(ctx context.Context, browser *rod.Browser,
 			m.mu.Lock()
 			runtime, exists := m.instances[instanceID]
 			m.mu.Unlock()
-			
+
 			if !exists || runtime == nil {
 				logger.Info(ctx, "Instance %s stopped, stopping XHR watcher", instanceID)
 				return
 			}
-			
+
 			// 获取所有页面
 			pages, err := browser.Pages()
 			if err != nil {
 				continue
 			}
-			
+
 			// 为每个新页面注入XHR拦截器
 			for _, page := range pages {
 				if page == nil {
 					continue
 				}
-				
+
 				pageInfo, err := page.Info()
 				if err != nil {
 					continue
 				}
-				
+
 				targetID := string(pageInfo.TargetID)
-				
+
 				// 跳过已处理的页面
 				if processedPages[targetID] {
 					continue
 				}
-				
+
 				// 跳过特殊页面
 				if strings.HasPrefix(pageInfo.URL, "chrome://") ||
 					strings.HasPrefix(pageInfo.URL, "chrome-extension://") ||
@@ -1838,18 +1838,18 @@ func (m *Manager) watchForNewPagesXHR(ctx context.Context, browser *rod.Browser,
 					processedPages[targetID] = true
 					continue
 				}
-				
+
 				// 标记为已处理
 				processedPages[targetID] = true
-				
+
 				logger.Info(ctx, "Injecting XHR interceptor into new page: %s (URL: %s)", targetID, pageInfo.URL)
-				
+
 				// 为新页面设置EvalOnNewDocument（影响该页面内的iframe和导航）
 				_, evalErr := page.EvalOnNewDocument(xhrInterceptorScriptForManager)
 				if evalErr != nil {
 					logger.Warn(ctx, "Failed to set EvalOnNewDocument for page %s: %v", targetID, evalErr)
 				}
-				
+
 				// 立即在页面注入（以防页面已经加载）
 				go func(p *rod.Page, tid string) {
 					_, injectErr := p.Eval(`() => { ` + xhrInterceptorScriptForManager + ` return true; }`)
