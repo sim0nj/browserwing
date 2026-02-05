@@ -365,7 +365,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	// 如果代理需要认证，启动认证处理
 	if proxyUsername != "" && proxyPassword != "" {
 		logger.Info(ctx, "Setting up proxy authentication handler...")
-		go browser.HandleAuth(proxyUsername, proxyPassword)
+		go browser.HandleAuth(proxyUsername, proxyPassword)()
 	}
 
 	// 获取并显示浏览器版本信息
@@ -1778,7 +1778,7 @@ func (m *Manager) startInstanceInternal(ctx context.Context, instanceID string) 
 	// 如果代理需要认证，启动认证处理
 	if proxyUsername != "" && proxyPassword != "" {
 		logger.Info(ctx, "Setting up proxy authentication handler...")
-		go browser.HandleAuth(proxyUsername, proxyPassword)
+		go browser.HandleAuth(proxyUsername, proxyPassword)()
 	}
 
 	// 关键：在浏览器连接后立即设置XHR拦截器，确保所有页面（包括后续打开的）都会自动监听XHR
