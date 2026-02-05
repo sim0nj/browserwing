@@ -383,10 +383,41 @@ func (r *Recorder) checkAndProcessAIRequestOnPage(ctx context.Context, page *rod
 		return
 	}
 
-	html, _ := requestData["html"].(string)
 	description, _ := requestData["description"].(string)
 	userPrompt, _ := requestData["user_prompt"].(string)
 	requestType, _ := requestData["type"].(string) // "extract" 或 "formfill"
+
+	// 支持新的多区域格式和旧的单HTML格式
+	var html string
+	regions, hasRegions := requestData["regions"].([]interface{})
+	
+	if hasRegions && len(regions) > 0 {
+		// 新格式：多区域
+		logger.Info(ctx, "Processing AI request with %d regions", len(regions))
+		
+		// 将所有区域的HTML合并
+		var htmlParts []string
+		for i, regionInterface := range regions {
+			if regionMap, ok := regionInterface.(map[string]interface{}); ok {
+				regionType, _ := regionMap["type"].(string)
+				regionXpath, _ := regionMap["xpath"].(string)
+				regionHtml, _ := regionMap["html"].(string)
+				
+				if regionHtml != "" {
+					if regionType == "pagination" {
+						htmlParts = append(htmlParts, fmt.Sprintf("\n<!-- Pagination Region (XPath: %s) -->\n%s", regionXpath, regionHtml))
+					} else {
+						htmlParts = append(htmlParts, fmt.Sprintf("\n<!-- Data Region %d (XPath: %s) -->\n%s", i+1, regionXpath, regionHtml))
+					}
+				}
+			}
+		}
+		
+		html = strings.Join(htmlParts, "\n\n")
+	} else {
+		// 旧格式：单个HTML
+		html, _ = requestData["html"].(string)
+	}
 
 	if html == "" {
 		logger.Warn(ctx, "AI request missing HTML content")

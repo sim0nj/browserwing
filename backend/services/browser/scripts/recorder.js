@@ -11,6 +11,10 @@ if (window.__browserwingRecorder__) {
 	window.__menuTrigger__ = null; // 菜单触发方式: 'button' 或 'contextmenu'
 	window.__aiExtractMode__ = false; // AI提取模式标志
 	window.__aiFormFillMode__ = false; // AI填充表单模式标志
+	window.__aiExtractControlPanel__ = null; // AI抓取控制面板
+	window.__aiExtractDataRegions__ = []; // 已选择的数据区域
+	window.__aiExtractPaginationRegion__ = null; // 已选择的分页区域
+	window.__aiExtractSelectingType__ = null; // 当前正在选择的类型: 'data' 或 'pagination'
 	window.__recorderUI__ = null; // 录制器 UI 元素
 	window.__highlightElement__ = null; // 高亮元素
 	window.__highlightLabel__ = null; // 高亮标签元素
@@ -1016,12 +1020,36 @@ if (window.__browserwingRecorder__) {
 		var actionButtons = document.createElement('div');
 		actionButtons.style.cssText = 'display:flex;align-items:center;gap:6px;';
 		
-		// 如果是 execute_js 类型，添加预览按钮
+		// 如果是 execute_js 类型，添加查看代码和预览按钮
 		if (action.type === 'execute_js' && action.js_code) {
+			// 查看代码按钮 - 黑白灰风格
+			var viewCodeBtn = document.createElement('button');
+			viewCodeBtn.setAttribute('data-action-index', index);
+			viewCodeBtn.style.cssText = 'padding:5px;background:#27272a;color:white;border:none;border-radius:6px;cursor:pointer;transition:all 0.2s;width:23px;height:23px;display:flex;align-items:center;justify-content:center;';
+			viewCodeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>';
+			viewCodeBtn.title = '{{VIEW_CODE}}';
+			viewCodeBtn.onmouseover = function() {
+				this.style.background = '#18181b';
+				this.style.transform = 'scale(1.08)';
+			};
+			viewCodeBtn.onmouseout = function() {
+				this.style.background = '#27272a';
+				this.style.transform = 'scale(1)';
+			};
+			viewCodeBtn.onclick = function(e) {
+				e.stopPropagation();
+				var idx = parseInt(this.getAttribute('data-action-index'));
+				var act = window.__recordedActions__[idx];
+				showCodeViewer(act);
+			};
+			actionButtons.appendChild(viewCodeBtn);
+			
+			// 预览执行结果按钮
 			var previewBtn = document.createElement('button');
 			previewBtn.setAttribute('data-action-index', index);
 			previewBtn.style.cssText = 'padding:5px;background:rgb(51 51 52);color:white;border:none;border-radius:6px;cursor:pointer;transition:all 0.2s;width:23px;height:23px;display:flex;align-items:center;justify-content:center;';
 			previewBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+			previewBtn.title = '{{PREVIEW}}';
 			previewBtn.onmouseover = function() {
 				this.style.background = 'rgb(51 51 52)';
 				this.style.transform = 'scale(1.08)';
@@ -1213,8 +1241,149 @@ if (window.__browserwingRecorder__) {
 		}
 	};
 	
+	// 显示代码查看器
+	var showCodeViewer = function(action) {
+		if (!action || !action.js_code) {
+			console.error('[BrowserWing] No code to display');
+			return;
+		}
+		
+		// 创建遮罩层
+		var overlay = document.createElement('div');
+		overlay.id = '__browserwing_code_viewer__';
+		overlay.className = '__browserwing-protected__';
+		overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+		
+		// 创建对话框
+		var dialog = document.createElement('div');
+		dialog.className = '__browserwing-protected__';
+		dialog.style.cssText = 'background:white;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);max-width:900px;width:90%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;';
+		
+		// 对话框头部
+		var dialogHeader = document.createElement('div');
+		dialogHeader.className = '__browserwing-protected__';
+		dialogHeader.style.cssText = 'padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;';
+		
+		var dialogTitle = document.createElement('div');
+		dialogTitle.className = '__browserwing-protected__';
+		dialogTitle.style.cssText = 'font-size:18px;font-weight:700;color:#0f172a;';
+		dialogTitle.textContent = '{{CODE_VIEWER_TITLE}}';
+		
+		var closeBtn = document.createElement('button');
+		closeBtn.className = '__browserwing-protected__';
+		closeBtn.style.cssText = 'background:none;border:none;font-size:24px;color:#6b7280;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all 0.2s;';
+		closeBtn.textContent = '×';
+		closeBtn.onmouseover = function() {
+			this.style.background = '#f3f4f6';
+			this.style.color = '#111827';
+		};
+		closeBtn.onmouseout = function() {
+			this.style.background = 'none';
+			this.style.color = '#6b7280';
+		};
+		closeBtn.onclick = function() {
+			overlay.remove();
+		};
+		
+		dialogHeader.appendChild(dialogTitle);
+		dialogHeader.appendChild(closeBtn);
+		
+		// 对话框内容
+		var dialogContent = document.createElement('div');
+		dialogContent.className = '__browserwing-protected__';
+		dialogContent.style.cssText = 'padding:0;overflow-y:auto;flex:1;background:#1e1e1e;position:relative;';
+		
+		// 复制按钮 - 放在代码框右上角
+		var copyBtn = document.createElement('button');
+		copyBtn.className = '__browserwing-protected__';
+		copyBtn.style.cssText = 'position:absolute;top:12px;right:12px;padding:8px 16px;background:#27272a;color:#d4d4d4;border:1px solid #3f3f46;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.2s;z-index:10;';
+		copyBtn.textContent = '{{COPY}}';
+		copyBtn.onmouseover = function() {
+			this.style.background = '#3f3f46';
+			this.style.borderColor = '#52525b';
+		};
+		copyBtn.onmouseout = function() {
+			this.style.background = '#27272a';
+			this.style.borderColor = '#3f3f46';
+		};
+		copyBtn.onclick = function() {
+			try {
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					navigator.clipboard.writeText(action.js_code).then(function() {
+						var originalText = copyBtn.textContent;
+						copyBtn.textContent = '{{COPIED}}';
+						copyBtn.style.background = '#10b981';
+						copyBtn.style.borderColor = '#10b981';
+						setTimeout(function() {
+							copyBtn.textContent = originalText;
+							copyBtn.style.background = '#27272a';
+							copyBtn.style.borderColor = '#3f3f46';
+						}, 2000);
+					}).catch(function(err) {
+						console.error('[BrowserWing] Copy failed:', err);
+						alert('{{COPY_FAILED}}');
+					});
+				} else {
+					// 降级方案：使用 textarea
+					var textarea = document.createElement('textarea');
+					textarea.value = action.js_code;
+					textarea.style.position = 'fixed';
+					textarea.style.opacity = '0';
+					document.body.appendChild(textarea);
+					textarea.select();
+					try {
+						document.execCommand('copy');
+						var originalText = copyBtn.textContent;
+						copyBtn.textContent = '{{COPIED}}';
+						copyBtn.style.background = '#10b981';
+						copyBtn.style.borderColor = '#10b981';
+						setTimeout(function() {
+							copyBtn.textContent = originalText;
+							copyBtn.style.background = '#27272a';
+							copyBtn.style.borderColor = '#3f3f46';
+						}, 2000);
+					} catch (err) {
+						console.error('[BrowserWing] Copy failed:', err);
+						alert('{{COPY_FAILED}}');
+					}
+					document.body.removeChild(textarea);
+				}
+			} catch (err) {
+				console.error('[BrowserWing] Copy error:', err);
+				alert('{{COPY_FAILED}}');
+			}
+		};
+		
+		// 代码显示区域
+		var codeBlock = document.createElement('pre');
+		codeBlock.className = '__browserwing-protected__';
+		codeBlock.style.cssText = 'margin:0;padding:24px;padding-top:50px;color:#d4d4d4;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;';
+		
+		var codeText = document.createElement('code');
+		codeText.className = '__browserwing-protected__';
+		codeText.textContent = action.js_code;
+		codeBlock.appendChild(codeText);
+		
+		dialogContent.appendChild(copyBtn);
+		dialogContent.appendChild(codeBlock);
+		
+		// 组装
+		dialog.appendChild(dialogHeader);
+		dialog.appendChild(dialogContent);
+		overlay.appendChild(dialog);
+		
+		// 点击遮罩关闭
+		overlay.onclick = function(e) {
+			if (e.target === overlay) {
+				overlay.remove();
+			}
+		};
+		
+		document.body.appendChild(overlay);
+	};
+	
 	// 预览 execute_js 操作的结果
-	var previewExecuteJSResult = function(action) {
+	var previewExecuteJSResult = async function(action) {
 		if (!action || !action.js_code) {
 			console.error('[BrowserWing] Invalid action for preview');
 			return;
@@ -1227,6 +1396,12 @@ if (window.__browserwingRecorder__) {
 			// 注意：AI 生成的代码通常已经是 IIFE (立即执行函数表达式)，如 (() => {...})()
 			// 直接 eval 执行即可，不需要再包装一层 function
 			var result = eval(action.js_code);
+			
+			// 检查是否是 Promise（异步代码）
+			if (result && typeof result.then === 'function') {
+				console.log('[BrowserWing] Detected async code, waiting for Promise...');
+				result = await result;
+			}
 			
 			console.log('[BrowserWing] Execute result:', result);
 			
@@ -1548,10 +1723,549 @@ if (window.__browserwingRecorder__) {
 		}
 	};
 	
+	// 创建AI抓取控制面板
+	var createAIExtractControlPanel = function() {
+		// 如果已存在，先移除
+		if (window.__aiExtractControlPanel__) {
+			window.__aiExtractControlPanel__.remove();
+			window.__aiExtractControlPanel__ = null;
+		}
+		
+		// 重置选择状态
+		window.__aiExtractDataRegions__ = [];
+		window.__aiExtractPaginationRegion__ = null;
+		window.__aiExtractSelectingType__ = null;
+		
+		// 创建遮罩层
+		var overlay = document.createElement('div');
+		overlay.className = '__browserwing-protected__';
+		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:999998;backdrop-filter:blur(2px);';
+		
+		// 创建控制面板
+		var panel = document.createElement('div');
+		panel.className = '__browserwing-protected__';
+		panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:520px;max-height:80vh;background:#fafafa;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);z-index:999999;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;';
+		
+		// 面板标题栏（可拖拽）
+		var header = document.createElement('div');
+		header.className = '__browserwing-protected__';
+		header.style.cssText = 'padding:20px 24px;background:linear-gradient(135deg,#27272a 0%,#18181b 100%);cursor:move;user-select:none;border-bottom:1px solid rgba(255,255,255,0.1);';
+		
+		var title = document.createElement('div');
+		title.className = '__browserwing-protected__';
+		title.style.cssText = 'font-size:16px;font-weight:700;color:#fff;letter-spacing:-0.02em;';
+		title.textContent = '{{AI_EXTRACT_CONTROL_TITLE}}';
+		header.appendChild(title);
+		
+		// 添加拖拽功能
+		var isDragging = false;
+		var currentX;
+		var currentY;
+		var initialX;
+		var initialY;
+		var xOffset = 0;
+		var yOffset = 0;
+		
+		header.addEventListener('mousedown', function(e) {
+			initialX = e.clientX - xOffset;
+			initialY = e.clientY - yOffset;
+			if (e.target === header || e.target === title) {
+				isDragging = true;
+			}
+		});
+		
+		document.addEventListener('mousemove', function(e) {
+			if (isDragging) {
+				e.preventDefault();
+				currentX = e.clientX - initialX;
+				currentY = e.clientY - initialY;
+				xOffset = currentX;
+				yOffset = currentY;
+				panel.style.transform = 'translate(calc(-50% + ' + currentX + 'px), calc(-50% + ' + currentY + 'px))';
+			}
+		});
+		
+		document.addEventListener('mouseup', function() {
+			isDragging = false;
+		});
+		
+		// 面板内容区域
+		var content = document.createElement('div');
+		content.className = '__browserwing-protected__';
+		content.style.cssText = 'padding:24px;max-height:calc(80vh - 180px);overflow-y:auto;';
+		
+		// 按钮区域
+		var buttonArea = document.createElement('div');
+		buttonArea.className = '__browserwing-protected__';
+		buttonArea.style.cssText = 'display:flex;gap:12px;margin-bottom:20px;';
+		
+		// 添加数据区域按钮
+		var addDataBtn = document.createElement('button');
+		addDataBtn.className = '__browserwing-protected__';
+		addDataBtn.style.cssText = 'flex:1;padding:12px 16px;background:#18181b;color:#fff;border:1.5px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+		addDataBtn.textContent = '{{ADD_DATA_REGION}}';
+		addDataBtn.onmouseover = function() {
+			this.style.background = '#27272a';
+			this.style.borderColor = 'rgba(255,255,255,0.2)';
+		};
+		addDataBtn.onmouseout = function() {
+			this.style.background = '#18181b';
+			this.style.borderColor = 'rgba(255,255,255,0.1)';
+		};
+		addDataBtn.onclick = function() {
+			window.__aiExtractSelectingType__ = 'data';
+			// 隐藏控制面板
+			overlay.style.display = 'none';
+			// 隐藏录制面板
+			if (window.__recorderUI__ && window.__recorderUI__.panel) {
+				window.__recorderUI__.panel.style.display = 'none';
+			}
+			document.body.style.cursor = 'crosshair';
+			showCurrentAction('{{CLICK_TO_SELECT_REGION}}');
+		};
+		
+		// 添加分页区域按钮
+		var addPaginationBtn = document.createElement('button');
+		addPaginationBtn.className = '__browserwing-protected__';
+		addPaginationBtn.style.cssText = 'flex:1;padding:12px 16px;background:#18181b;color:#fff;border:1.5px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+		addPaginationBtn.textContent = '{{ADD_PAGINATION_REGION}}';
+		addPaginationBtn.onmouseover = function() {
+			this.style.background = '#27272a';
+			this.style.borderColor = 'rgba(255,255,255,0.2)';
+		};
+		addPaginationBtn.onmouseout = function() {
+			this.style.background = '#18181b';
+			this.style.borderColor = 'rgba(255,255,255,0.1)';
+		};
+		addPaginationBtn.onclick = function() {
+			window.__aiExtractSelectingType__ = 'pagination';
+			// 隐藏控制面板
+			overlay.style.display = 'none';
+			// 隐藏录制面板
+			if (window.__recorderUI__ && window.__recorderUI__.panel) {
+				window.__recorderUI__.panel.style.display = 'none';
+			}
+			document.body.style.cursor = 'crosshair';
+			showCurrentAction('{{CLICK_TO_SELECT_REGION}}');
+		};
+		
+		buttonArea.appendChild(addDataBtn);
+		buttonArea.appendChild(addPaginationBtn);
+		
+		// 已选择区域列表
+		var regionListTitle = document.createElement('div');
+		regionListTitle.className = '__browserwing-protected__';
+		regionListTitle.style.cssText = 'font-size:13px;font-weight:600;color:#27272a;margin-bottom:12px;';
+		regionListTitle.textContent = '{{SELECTED_REGIONS}}';
+		
+		var regionList = document.createElement('div');
+		regionList.id = '__ai_extract_region_list__';
+		regionList.className = '__browserwing-protected__';
+		regionList.style.cssText = 'margin-bottom:20px;min-height:60px;';
+		
+		var emptyHint = document.createElement('div');
+		emptyHint.id = '__ai_extract_empty_hint__';
+		emptyHint.className = '__browserwing-protected__';
+		emptyHint.style.cssText = 'padding:20px;background:#fff;border:2px dashed #d4d4d8;border-radius:10px;text-align:center;color:#a1a1aa;font-size:13px;';
+		emptyHint.textContent = '{{NO_REGIONS_SELECTED}}';
+		regionList.appendChild(emptyHint);
+		
+		// 提示词输入区域
+		var promptLabel = document.createElement('div');
+		promptLabel.className = '__browserwing-protected__';
+		promptLabel.style.cssText = 'font-size:13px;font-weight:600;color:#27272a;margin-bottom:8px;';
+		promptLabel.textContent = '{{CUSTOM_PROMPT}}';
+		
+		var promptInput = document.createElement('textarea');
+		promptInput.id = '__ai_extract_prompt_input__';
+		promptInput.className = '__browserwing-protected__';
+		promptInput.placeholder = '{{PROMPT_PLACEHOLDER}}';
+		promptInput.style.cssText = 'width:100%;min-height:80px;padding:12px;background:#fff;border:1.5px solid #e4e4e7;border-radius:10px;font-size:13px;color:#27272a;resize:vertical;font-family:inherit;box-sizing:border-box;';
+		promptInput.onfocus = function() {
+			this.style.borderColor = '#52525b';
+			this.style.outline = 'none';
+		};
+		promptInput.onblur = function() {
+			this.style.borderColor = '#e4e4e7';
+		};
+		
+		content.appendChild(buttonArea);
+		content.appendChild(regionListTitle);
+		content.appendChild(regionList);
+		content.appendChild(promptLabel);
+		content.appendChild(promptInput);
+		
+		// 底部按钮
+		var footer = document.createElement('div');
+		footer.className = '__browserwing-protected__';
+		footer.style.cssText = 'padding:20px 24px;background:#f4f4f5;border-top:1px solid #e4e4e7;display:flex;gap:12px;';
+		
+		var cancelBtn = document.createElement('button');
+		cancelBtn.className = '__browserwing-protected__';
+		cancelBtn.style.cssText = 'flex:1;padding:12px 20px;background:#fff;color:#27272a;border:1.5px solid #d4d4d8;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;';
+		cancelBtn.textContent = '{{CANCEL_EXTRACT}}';
+		cancelBtn.onmouseover = function() {
+			this.style.background = '#f4f4f5';
+			this.style.borderColor = '#a1a1aa';
+		};
+		cancelBtn.onmouseout = function() {
+			this.style.background = '#fff';
+			this.style.borderColor = '#d4d4d8';
+		};
+		cancelBtn.onclick = function() {
+			closeAIExtractControlPanel();
+		};
+		
+		var confirmBtn = document.createElement('button');
+		confirmBtn.className = '__browserwing-protected__';
+		confirmBtn.style.cssText = 'flex:1;padding:12px 20px;background:linear-gradient(135deg,#18181b 0%,#09090b 100%);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;box-shadow:0 2px 12px rgba(0,0,0,0.2);';
+		confirmBtn.textContent = '{{CONFIRM_EXTRACT}}';
+		confirmBtn.onmouseover = function() {
+			this.style.background = 'linear-gradient(135deg,#27272a 0%,#18181b 100%)';
+			this.style.transform = 'translateY(-1px)';
+			this.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)';
+		};
+		confirmBtn.onmouseout = function() {
+			this.style.background = 'linear-gradient(135deg,#18181b 0%,#09090b 100%)';
+			this.style.transform = 'translateY(0)';
+			this.style.boxShadow = '0 2px 12px rgba(0,0,0,0.2)';
+		};
+		confirmBtn.onclick = function() {
+			handleAIExtractConfirm();
+		};
+		
+		footer.appendChild(cancelBtn);
+		footer.appendChild(confirmBtn);
+		
+		// 组装面板
+		panel.appendChild(header);
+		panel.appendChild(content);
+		panel.appendChild(footer);
+		overlay.appendChild(panel);
+		
+		// 点击遮罩关闭（点击面板不关闭）
+		overlay.onclick = function(e) {
+			if (e.target === overlay) {
+				closeAIExtractControlPanel();
+			}
+		};
+		
+		document.body.appendChild(overlay);
+		window.__aiExtractControlPanel__ = overlay;
+		
+		console.log('[BrowserWing] AI Extract Control Panel created');
+	};
+	
+	// 关闭AI抓取控制面板
+	var closeAIExtractControlPanel = function() {
+		if (window.__aiExtractControlPanel__) {
+			window.__aiExtractControlPanel__.remove();
+			window.__aiExtractControlPanel__ = null;
+		}
+		
+		// 重置选择状态
+		window.__aiExtractDataRegions__ = [];
+		window.__aiExtractPaginationRegion__ = null;
+		window.__aiExtractSelectingType__ = null;
+		
+		// 退出AI提取模式
+		if (window.__aiExtractMode__) {
+			toggleAIExtractMode();
+		}
+		
+		console.log('[BrowserWing] AI Extract Control Panel closed');
+	};
+	
+	// 更新区域列表显示
+	var updateRegionList = function() {
+		var regionList = document.getElementById('__ai_extract_region_list__');
+		if (!regionList) return;
+		
+		var emptyHint = document.getElementById('__ai_extract_empty_hint__');
+		var hasRegions = window.__aiExtractDataRegions__.length > 0 || window.__aiExtractPaginationRegion__;
+		
+		if (hasRegions && emptyHint) {
+			emptyHint.remove();
+		} else if (!hasRegions && !emptyHint) {
+			emptyHint = document.createElement('div');
+			emptyHint.id = '__ai_extract_empty_hint__';
+			emptyHint.className = '__browserwing-protected__';
+			emptyHint.style.cssText = 'padding:20px;background:#fff;border:2px dashed #d4d4d8;border-radius:10px;text-align:center;color:#a1a1aa;font-size:13px;';
+			emptyHint.textContent = '{{NO_REGIONS_SELECTED}}';
+			regionList.appendChild(emptyHint);
+			return;
+		}
+		
+		// 清空现有项（保留空提示）
+		var items = regionList.querySelectorAll('.region-item');
+		for (var i = 0; i < items.length; i++) {
+			items[i].remove();
+		}
+		
+		// 添加数据区域
+		for (var j = 0; j < window.__aiExtractDataRegions__.length; j++) {
+			var region = window.__aiExtractDataRegions__[j];
+			var item = createRegionItem(region, 'data', j);
+			regionList.appendChild(item);
+		}
+		
+		// 添加分页区域
+		if (window.__aiExtractPaginationRegion__) {
+			var paginationItem = createRegionItem(window.__aiExtractPaginationRegion__, 'pagination', 0);
+			regionList.appendChild(paginationItem);
+		}
+	};
+	
+	// 创建区域项
+	var createRegionItem = function(region, type, index) {
+		var item = document.createElement('div');
+		item.className = '__browserwing-protected__ region-item';
+		item.style.cssText = 'padding:12px 14px;background:#fff;border:1.5px solid #e4e4e7;border-radius:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;transition:all 0.2s;';
+		item.onmouseover = function() {
+			this.style.borderColor = '#a1a1aa';
+			this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+		};
+		item.onmouseout = function() {
+			this.style.borderColor = '#e4e4e7';
+			this.style.boxShadow = 'none';
+		};
+		
+		var leftPart = document.createElement('div');
+		leftPart.className = '__browserwing-protected__';
+		leftPart.style.cssText = 'flex:1;overflow:hidden;';
+		
+		var typeLabel = document.createElement('div');
+		typeLabel.className = '__browserwing-protected__';
+		var labelText = type === 'data' ? '{{DATA_REGION}} ' + (index + 1) : '{{PAGINATION_REGION}}';
+		var labelColor = type === 'data' ? '#3b82f6' : '#10b981';
+		typeLabel.style.cssText = 'display:inline-block;padding:2px 8px;background:' + labelColor + ';color:#fff;border-radius:4px;font-size:11px;font-weight:600;margin-bottom:6px;';
+		typeLabel.textContent = labelText;
+		
+		var xpathText = document.createElement('div');
+		xpathText.className = '__browserwing-protected__';
+		xpathText.style.cssText = 'font-size:12px;color:#52525b;font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+		xpathText.textContent = region.xpath;
+		xpathText.title = region.xpath;
+		
+		leftPart.appendChild(typeLabel);
+		leftPart.appendChild(xpathText);
+		
+		var removeBtn = document.createElement('button');
+		removeBtn.className = '__browserwing-protected__';
+		removeBtn.style.cssText = 'padding:6px 12px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.2s;margin-left:12px;';
+		removeBtn.textContent = '{{REMOVE_REGION}}';
+		removeBtn.onmouseover = function() {
+			this.style.background = '#fee2e2';
+			this.style.borderColor = '#fca5a5';
+		};
+		removeBtn.onmouseout = function() {
+			this.style.background = '#fef2f2';
+			this.style.borderColor = '#fecaca';
+		};
+		removeBtn.onclick = function() {
+			if (type === 'data') {
+				window.__aiExtractDataRegions__.splice(index, 1);
+			} else {
+				window.__aiExtractPaginationRegion__ = null;
+			}
+			updateRegionList();
+		};
+		
+		item.appendChild(leftPart);
+		item.appendChild(removeBtn);
+		
+		return item;
+	};
+	
+	// 处理区域选择点击
+	var handleRegionSelectClick = function(element) {
+		if (!window.__aiExtractSelectingType__) return false;
+		
+		var selectors = getSelector(element);
+		var region = {
+			element: element,
+			xpath: selectors.xpath,
+			css: selectors.css,
+			tagName: element.tagName ? element.tagName.toLowerCase() : ''
+		};
+		
+		if (window.__aiExtractSelectingType__ === 'data') {
+			window.__aiExtractDataRegions__.push(region);
+		} else if (window.__aiExtractSelectingType__ === 'pagination') {
+			window.__aiExtractPaginationRegion__ = region;
+		}
+		
+		// 恢复面板显示
+		if (window.__aiExtractControlPanel__) {
+			window.__aiExtractControlPanel__.style.display = 'block';
+		}
+		
+		// 恢复录制面板显示
+		if (window.__recorderUI__ && window.__recorderUI__.panel) {
+			window.__recorderUI__.panel.style.display = 'block';
+		}
+		
+		document.body.style.cursor = 'default';
+		window.__aiExtractSelectingType__ = null;
+		
+		// 更新区域列表
+		updateRegionList();
+		
+		showCurrentAction('{{REGION_SELECTED}}');
+		
+		return true;
+	};
+	
+	// 处理确认抓取
+	var handleAIExtractConfirm = async function() {
+		// 检查是否至少选择了一个数据区域
+		if (window.__aiExtractDataRegions__.length === 0) {
+			alert('{{NO_REGIONS_SELECTED}}');
+			return;
+		}
+		
+		// 获取用户输入的提示词
+		var promptInput = document.getElementById('__ai_extract_prompt_input__');
+		var userPrompt = promptInput ? promptInput.value.trim() : '';
+		
+		// 如果有分页区域，在提示词中添加分页提示
+		if (window.__aiExtractPaginationRegion__ && userPrompt.indexOf('分页') === -1 && userPrompt.indexOf('pagination') === -1) {
+			var paginationHint = '\n\n注意：页面包含分页组件，请根据分页组件进行分页抓取，并将所有页面的数据汇总后返回。';
+			userPrompt += paginationHint;
+		}
+		
+		// 关闭控制面板
+		if (window.__aiExtractControlPanel__) {
+			window.__aiExtractControlPanel__.remove();
+			window.__aiExtractControlPanel__ = null;
+		}
+		
+		// 显示全屏 Loading
+		showFullPageLoading('{{AI_ANALYZING_PAGE}}');
+		
+		try {
+			// 收集所有区域的HTML
+			var regionsHtml = [];
+			
+			for (var i = 0; i < window.__aiExtractDataRegions__.length; i++) {
+				var dataRegion = window.__aiExtractDataRegions__[i];
+				var cleanedHtml = cleanAndSampleHTML(dataRegion.element);
+				regionsHtml.push({
+					type: 'data',
+					xpath: dataRegion.xpath,
+					html: cleanedHtml
+				});
+			}
+			
+			if (window.__aiExtractPaginationRegion__) {
+				var paginationHtml = cleanAndSampleHTML(window.__aiExtractPaginationRegion__.element);
+				regionsHtml.push({
+					type: 'pagination',
+					xpath: window.__aiExtractPaginationRegion__.xpath,
+					html: paginationHtml
+				});
+			}
+			
+			// 更新 loading 提示
+			if (window.__loadingOverlay__) {
+				var loadingText = window.__loadingOverlay__.querySelector('div > div:nth-child(2)');
+				if (loadingText) loadingText.textContent = '{{AI_GENERATING}}';
+			}
+			
+			console.log('[BrowserWing] Submitting AI extract request with multiple regions...');
+			
+			// 设置请求到全局变量
+			window.__aiExtractionRequest__ = {
+				type: 'extract',
+				regions: regionsHtml,
+				description: '{{EXTRACT_PROMPT}}',
+				user_prompt: userPrompt
+			};
+			
+			// 轮询等待后端处理结果
+			var maxWaitTime = 60000;
+			var pollInterval = 200;
+			var elapsedTime = 0;
+			
+			var result = await new Promise(function(resolve, reject) {
+				var pollTimer = setInterval(function() {
+					elapsedTime += pollInterval;
+					
+					if (window.__aiExtractionResponse__) {
+						clearInterval(pollTimer);
+						var response = window.__aiExtractionResponse__;
+						delete window.__aiExtractionResponse__;
+						delete window.__aiExtractionRequest__;
+						resolve(response);
+					} else if (elapsedTime >= maxWaitTime) {
+						clearInterval(pollTimer);
+						delete window.__aiExtractionRequest__;
+						reject(new Error('{{AI_TIMEOUT}}'));
+					}
+				}, pollInterval);
+			});
+			
+			// 检查响应
+			if (!result.success) {
+				throw new Error(result.error || '{{AI_EXTRACT_FAILED}}');
+			}
+			
+			if (!result.javascript) {
+				throw new Error('No JavaScript code returned');
+			}
+			
+			console.log('[BrowserWing] AI extraction successful, code length:', result.javascript.length);
+			
+			// 创建执行操作记录
+			var firstRegion = window.__aiExtractDataRegions__[0];
+			var variableName = 'ai_data_' + window.__recordedActions__.length;
+			
+			var action = {
+				type: 'execute_js',
+				timestamp: Date.now(),
+				selector: firstRegion.css,
+				xpath: firstRegion.xpath,
+				js_code: result.javascript,
+				variable_name: variableName,
+				tagName: firstRegion.tagName,
+				description: '{{AI_EXTRACT_DESC}}'
+			};
+			
+			recordAction(action, firstRegion.element, 'execute_js');
+			
+			// 移除 Loading
+			removeFullPageLoading();
+			
+			showCurrentAction('{{AI_EXTRACT_SUCCESS}}' + (result.used_model || 'unknown'));
+			console.log('[BrowserWing] AI extraction code added:', variableName);
+			
+			// 清理
+			window.__aiExtractDataRegions__ = [];
+			window.__aiExtractPaginationRegion__ = null;
+			
+			// 自动退出 AI 提取模式
+			setTimeout(function() {
+				if (window.__aiExtractMode__) {
+					toggleAIExtractMode();
+				}
+			}, 2000);
+			
+		} catch (error) {
+			// 移除 Loading
+			removeFullPageLoading();
+			
+			// 清理全局变量
+			delete window.__aiExtractionRequest__;
+			delete window.__aiExtractionResponse__;
+			
+			console.error('[BrowserWing] AI extraction error:', error);
+			showCurrentAction('{{AI_EXTRACT_ERROR}}' + error.message);
+		}
+	};
+	
 	// 切换 AI 提取模式
 	var toggleAIExtractMode = function() {
 		window.__aiExtractMode__ = !window.__aiExtractMode__;
-		var ui = window.__recorderUI__;
 		
 		if (window.__aiExtractMode__) {
 			// 关闭其他模式
@@ -1562,31 +2276,12 @@ if (window.__browserwingRecorder__) {
 				toggleAIFormFillMode();
 			}
 			
-			// 开启 AI 提取模式
-			ui.aiExtractBtn.textContent = '{{EXIT_AI_EXTRACT}}';
-			ui.aiExtractBtn.style.background = '#111827';
-			ui.aiExtractBtn.onmouseover = function() {
-				this.style.background = '#030712';
-			};
-			ui.aiExtractBtn.onmouseout = function() {
-				this.style.background = '#111827';
-			};
-			document.body.style.cursor = 'crosshair';
-			showCurrentAction('{{AI_EXTRACT_MODE_ENABLED}}');
-			console.log('[BrowserWing] AI Extract mode enabled');
+			// 显示AI控制面板而不是直接进入选择模式
+			createAIExtractControlPanel();
+			console.log('[BrowserWing] AI Extract mode enabled - showing control panel');
 		} else {
 			// 关闭 AI 提取模式
-			ui.aiExtractBtn.textContent = '{{AI_EXTRACT}}';
-			ui.aiExtractBtn.style.background = '#1f2937';
-			ui.aiExtractBtn.style.borderColor = '#1f2937';
-			ui.aiExtractBtn.onmouseover = function() {
-				this.style.background = '#111827';
-				this.style.borderColor = '#111827';
-			};
-			ui.aiExtractBtn.onmouseout = function() {
-				this.style.background = '#1f2937';
-				this.style.borderColor = '#1f2937';
-			};
+			closeAIExtractControlPanel();
 			document.body.style.cursor = 'default';
 			window.__selectedElement__ = null;
 			hideHighlight();
@@ -2813,6 +3508,15 @@ if (window.__browserwingRecorder__) {
 		if (target.closest && target.closest('#__browserwing_recorder_panel__')) return;
 		if (target.closest && target.closest('#__browserwing_extract_menu__')) return;
 		if (target.closest && target.closest('#__browserwing_preview_dialog__')) return;
+		// 忽略AI控制面板
+		if (target.className && target.className.indexOf('__browserwing-protected__') !== -1) return;
+		if (window.__aiExtractControlPanel__ && target.closest && window.__aiExtractControlPanel__.contains(target)) return;
+		
+		// 在选择区域模式下也显示高亮
+		if (window.__aiExtractSelectingType__) {
+			highlightElement(target);
+			return;
+		}
 		
 		highlightElement(target);
 		} catch (err) {
@@ -2822,6 +3526,11 @@ if (window.__browserwingRecorder__) {
 	
 	document.addEventListener('mouseout', function(e) {
 		if (!window.__isRecordingActive__) return;
+		// 在选择区域模式下也隐藏高亮
+		if (window.__aiExtractSelectingType__) {
+			hideHighlight();
+			return;
+		}
 		hideHighlight();
 	});
 	
@@ -2841,8 +3550,11 @@ if (window.__browserwingRecorder__) {
 		if (target.closest && target.closest('#__browserwing_ai_mode_menu__')) return;
 		if (target.closest && target.closest('#__browserwing_selection_overlay__')) return;
 		if (target.closest && target.closest('#__browserwing_preview_dialog__')) return;
+		// 忽略AI控制面板和代码查看器
+		if (target.className && target.className.indexOf('__browserwing-protected__') !== -1) return;
+		if (window.__aiExtractControlPanel__ && target.closest && window.__aiExtractControlPanel__.contains(target)) return;
 			
-			// 如果在 AI 填充表单模式下，阻止默认行为并调用 AI 生成
+			// 如果在 AI 填充表单模式下，阻止默认行为并调用 AI 生成（不录制）
 			if (window.__aiFormFillMode__) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -2850,12 +3562,20 @@ if (window.__browserwingRecorder__) {
 				return false;
 			}
 			
-			// 如果在 AI 提取模式下，阻止默认行为并调用 AI 生成
-			if (window.__aiExtractMode__) {
+			// 如果在 AI 提取模式下的区域选择状态（不录制）
+			if (window.__aiExtractMode__ && window.__aiExtractSelectingType__) {
 				e.preventDefault();
 				e.stopPropagation();
-				handleAIExtractClick(target);
-				return false;
+				var handled = handleRegionSelectClick(target);
+				if (handled) {
+					return false;
+				}
+			}
+			
+			// 如果在 AI 提取模式下但不在选择状态（面板打开中，不录制）
+			if (window.__aiExtractMode__) {
+				// 不录制操作，直接返回
+				return;
 			}
 			
 			// 如果在抓取模式下，阻止默认行为并记录抓取操作
@@ -3045,6 +3765,11 @@ if (window.__browserwingRecorder__) {
 	document.addEventListener('input', function(e) {
 		if (!window.__isRecordingActive__) return;
 		
+		// 在AI模式下不录制输入
+		if (window.__aiExtractMode__ || window.__aiFormFillMode__) {
+			return;
+		}
+		
 		try {
 			var target = e.target || e.srcElement;
 			if (!target) return;
@@ -3215,6 +3940,11 @@ if (window.__browserwingRecorder__) {
 	// 监听选择事件
 	document.addEventListener('change', function(e) {
 		if (!window.__isRecordingActive__) return;
+		
+		// 在AI模式下不录制变更
+		if (window.__aiExtractMode__ || window.__aiFormFillMode__) {
+			return;
+		}
 		
 		try {
 			var target = e.target || e.srcElement;
