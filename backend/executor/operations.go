@@ -210,6 +210,15 @@ func (e *Executor) Click(ctx context.Context, identifier string, opts *ClickOpti
 		}, err
 	}
 
+	// 调试：输出元素的详细信息
+	elemHTML, _ := elem.HTML()
+	elemText, _ := elem.Text()
+	htmlPreview := elemHTML
+	if len(htmlPreview) > 150 {
+		htmlPreview = htmlPreview[:150] + "..."
+	}
+	logger.Info(ctx, "[Click] Found element - Text: '%s', HTML: %s", elemText, htmlPreview)
+
 	// 等待元素可见
 	if opts.WaitVisible {
 		elem = elem.Timeout(opts.Timeout)
@@ -243,28 +252,61 @@ func (e *Executor) Click(ctx context.Context, identifier string, opts *ClickOpti
 		}, err
 	}
 
-	// 点击
-	var button proto.InputMouseButton
-	switch opts.Button {
-	case "right":
-		button = proto.InputMouseButtonRight
-	case "middle":
-		button = proto.InputMouseButtonMiddle
-	default:
-		button = proto.InputMouseButtonLeft
-	}
+	// 等待页面稳定（关键！避免滚动期间元素位置变化）
+	time.Sleep(300 * time.Millisecond)
 
-	for i := 0; i < opts.ClickCount; i++ {
+	// 策略：对于可能被遮挡的场景，直接使用增强的 JavaScript 点击
+	// 这样可以确保事件正确触发，不管元素是否被遮挡
+	logger.Info(ctx, "[Click] Attempting to click element using enhanced JavaScript: %s", identifier)
+	_, jsErr := elem.Eval(`() => {
+		// 先聚焦元素
+		try {
+			this.focus();
+		} catch(e) {
+			// 忽略聚焦失败
+		}
+		
+		// 触发完整的鼠标事件序列（更可靠）
+		const events = ['mousedown', 'mouseup', 'click'];
+		events.forEach(eventType => {
+			const event = new MouseEvent(eventType, {
+				bubbles: true,
+				cancelable: true,
+				view: window
+			});
+			this.dispatchEvent(event);
+		});
+		
+		// 如果是按钮或链接，也触发原生 click
+		if (this.tagName === 'BUTTON' || this.tagName === 'A' || this.tagName === 'INPUT') {
+			this.click();
+		}
+	}`)
+	
+	if jsErr != nil {
+		// JavaScript 点击失败，尝试正常点击作为后备
+		logger.Warn(ctx, "[Click] Enhanced JS click failed, trying normal click: %s", jsErr.Error())
+		
+		var button proto.InputMouseButton
+		switch opts.Button {
+		case "right":
+			button = proto.InputMouseButtonRight
+		case "middle":
+			button = proto.InputMouseButtonMiddle
+		default:
+			button = proto.InputMouseButtonLeft
+		}
+
 		if err := elem.Click(button, 1); err != nil {
 			return &OperationResult{
 				Success:   false,
-				Error:     fmt.Sprintf("Failed to click element: %s", err.Error()),
+				Error:     fmt.Sprintf("Both enhanced JS and normal click failed: %s", err.Error()),
 				Timestamp: time.Now(),
 			}, err
 		}
-		if i < opts.ClickCount-1 {
-			time.Sleep(100 * time.Millisecond)
-		}
+		logger.Info(ctx, "[Click] Normal click succeeded")
+	} else {
+		logger.Info(ctx, "[Click] ✓ Enhanced JavaScript click succeeded: %s", identifier)
 	}
 
 	// 同时返回当前的页面可访问性快照
@@ -732,6 +774,19 @@ func (e *Executor) findElementWithTimeout(ctx context.Context, page *rod.Page, i
 	// 设置超时
 	timeoutPage := page.Timeout(timeout)
 
+	// 清理 identifier：去除可能的前缀
+	identifier = strings.TrimSpace(identifier)
+	// 支持 "xpath: //*[@id=...]" 格式
+	if strings.HasPrefix(strings.ToLower(identifier), "xpath:") {
+		identifier = strings.TrimSpace(identifier[6:]) // 去除 "xpath:" 前缀
+		logger.Info(ctx, "[findElementWithTimeout] Detected 'xpath:' prefix, cleaned to: %s", identifier)
+	}
+	// 支持 "css: #selector" 格式
+	if strings.HasPrefix(strings.ToLower(identifier), "css:") {
+		identifier = strings.TrimSpace(identifier[4:]) // 去除 "css:" 前缀
+		logger.Info(ctx, "[findElementWithTimeout] Detected 'css:' prefix, cleaned to: %s", identifier)
+	}
+
 	// 0. 尝试 RefID 格式：@e1, @e2, e1, e2（优先级最高，最稳定）
 	if strings.HasPrefix(identifier, "@") || (len(identifier) > 0 && identifier[0] == 'e' && len(identifier) <= 10) {
 		refID := strings.TrimPrefix(identifier, "@")
@@ -746,6 +801,48 @@ func (e *Executor) findElementWithTimeout(ctx context.Context, page *rod.Page, i
 	}
 
 	// 2. 尝试作为 XPath
+	// 如果是 XPath，尝试找到所有匹配的元素，然后选择最上层可交互的
+	if strings.HasPrefix(identifier, "/") || strings.HasPrefix(identifier, "(") {
+		elems, err := timeoutPage.ElementsX(identifier)
+		if err == nil && len(elems) > 0 {
+			// 如果只有一个元素，直接返回
+			if len(elems) == 1 {
+				return elems[0], nil
+			}
+			
+			// 多个元素时，找到第一个可交互的（未被遮挡的）
+			logger.Info(ctx, "[findElementWithTimeout] Found %d elements matching XPath, selecting the interactable one", len(elems))
+			for i, elem := range elems {
+				// 检查元素是否可见
+				visible, _ := elem.Visible()
+				if !visible {
+					continue
+				}
+				
+				// 检查元素是否可交互（未被遮挡）
+				point, err := elem.Interactable()
+				if err == nil && point != nil {
+					logger.Info(ctx, "[findElementWithTimeout] Selected element #%d (interactable)", i+1)
+					return elem, nil
+				}
+			}
+			
+			// 如果没有找到可交互的，返回第一个可见的
+			for i, elem := range elems {
+				visible, _ := elem.Visible()
+				if visible {
+					logger.Warn(ctx, "[findElementWithTimeout] No interactable element found, using first visible one (#%d)", i+1)
+					return elem, nil
+				}
+			}
+			
+			// 如果都不可见，返回第一个
+			logger.Warn(ctx, "[findElementWithTimeout] No visible element found, using first match")
+			return elems[0], nil
+		}
+	}
+	
+	// 如果上面的逻辑没有返回，尝试单元素查找
 	if elem, err := timeoutPage.ElementX(identifier); err == nil {
 		return elem, nil
 	}

@@ -30,6 +30,11 @@ var iframeMessageListenerScript string
 var xhrInterceptorScript string
 
 // Recorder 浏览器操作录制器
+// DBInterface 定义需要的数据库接口
+type DBInterface interface {
+	ListLLMConfigs() ([]*models.LLMConfigModel, error)
+}
+
 type Recorder struct {
 	mu              sync.Mutex
 	isRecording     bool
@@ -43,6 +48,7 @@ type Recorder struct {
 	lastSyncedCount int
 	apiServerPort   string                  // API 服务器端口
 	llmManager      *llm.Manager            // LLM 管理器
+	db              DBInterface             // 数据库接口
 	language        string                  // 当前语言设置
 	downloadedFiles []models.DownloadedFile // 录制过程中下载的文件
 	downloadPath    string                  // 下载目录路径
@@ -63,6 +69,13 @@ func (r *Recorder) SetLLMManager(manager *llm.Manager) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.llmManager = manager
+}
+
+// SetDB 设置数据库接口
+func (r *Recorder) SetDB(db DBInterface) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.db = db
 }
 
 // SetAPIServerPort 设置 API 服务器端口
@@ -172,6 +185,29 @@ func (r *Recorder) StartRecording(ctx context.Context, page *rod.Page, url strin
 	_, err = page.Eval(`() => { window.__browserwingRecordingMode__ = true; }`)
 	if err != nil {
 		logger.Warn(ctx, "Failed to set recording mode flag: %v", err)
+	}
+
+	// 注入 LLM 配置列表供 AI 控制弹框使用
+	if r.db != nil {
+		configs, listErr := r.db.ListLLMConfigs()
+		if listErr == nil && len(configs) > 0 {
+			// 将配置转换为 JSON
+			configsJSON, marshalErr := json.Marshal(configs)
+			if marshalErr == nil {
+				configsJSONStr := string(configsJSON)
+				// 转义 JSON 字符串以安全注入到 JavaScript 中
+				configsJSONStr = strings.ReplaceAll(configsJSONStr, `\`, `\\`)
+				configsJSONStr = strings.ReplaceAll(configsJSONStr, "`", "\\`")
+				configsJSONStr = strings.ReplaceAll(configsJSONStr, "$", "\\$")
+				
+				_, evalErr := page.Eval(fmt.Sprintf(`() => { window.__llmConfigs__ = %s; }`, configsJSONStr))
+				if evalErr != nil {
+					logger.Warn(ctx, "Failed to inject LLM configs: %v", evalErr)
+				} else {
+					logger.Info(ctx, "✓ Injected %d LLM configs for AI control", len(configs))
+				}
+			}
+		}
 	}
 
 	// 替换录制脚本中的多语言占位符

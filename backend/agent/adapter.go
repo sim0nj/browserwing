@@ -10,7 +10,7 @@ import (
 
 // SendMessageInterface 是为了适配外部接口而添加的方法
 // 接收 chan<- any 并转换为内部使用的 chan<- StreamChunk
-func (am *AgentManager) SendMessageInterface(ctx context.Context, sessionID, userMessage string, streamChan chan<- any) error {
+func (am *AgentManager) SendMessageInterface(ctx context.Context, sessionID, userMessage string, streamChan chan<- any, llmConfigID string) error {
 	// 如果是AI控制临时会话（以ai_control_开头），先创建临时会话
 	if strings.HasPrefix(sessionID, "ai_control_") {
 		// 检查会话是否已存在
@@ -19,7 +19,7 @@ func (am *AgentManager) SendMessageInterface(ctx context.Context, sessionID, use
 			am.mu.Lock()
 			session := &ChatSession{
 				ID:          sessionID,
-				LLMConfigID: "", // 使用默认配置
+				LLMConfigID: llmConfigID, // 使用指定的 LLM 配置，为空则使用默认配置
 				Messages:    []ChatMessage{},
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
@@ -27,7 +27,11 @@ func (am *AgentManager) SendMessageInterface(ctx context.Context, sessionID, use
 			am.sessions[sessionID] = session
 			am.mu.Unlock()
 			
-			logger.Info(ctx, "Created temporary AI control session: %s (will not be saved to database)", sessionID)
+			if llmConfigID != "" {
+				logger.Info(ctx, "Created temporary AI control session: %s with LLM config: %s (will not be saved to database)", sessionID, llmConfigID)
+			} else {
+				logger.Info(ctx, "Created temporary AI control session: %s with default LLM config (will not be saved to database)", sessionID)
+			}
 			
 			// 延迟清理：10分钟后自动删除临时会话
 			go func() {

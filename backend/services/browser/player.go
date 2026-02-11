@@ -3250,6 +3250,14 @@ func (p *Player) executeAIControl(ctx context.Context, page *rod.Page, action mo
 	prompt := promptBuilder.String()
 	logger.Debug(ctx, "Full AI control prompt: %s", prompt)
 
+	// 获取指定的 LLM 配置 ID
+	llmConfigID := action.AIControlLLMConfigID
+	if llmConfigID != "" {
+		logger.Info(ctx, "[executeAIControl] Using specified LLM config: %s", llmConfigID)
+	} else {
+		logger.Info(ctx, "[executeAIControl] Using default LLM config")
+	}
+
 	// 创建一个唯一的会话ID用于这次 AI 控制
 	// SendMessage 会自动创建会话（如果不存在）
 	sessionID := fmt.Sprintf("ai_control_%d", time.Now().UnixNano())
@@ -3290,7 +3298,7 @@ func (p *Player) executeAIControl(ctx context.Context, page *rod.Page, action mo
 				}
 			default:
 				// 对于其他类型，简单记录
-				logger.Debug(ctx, "AI control stream: %v", v)
+				// logger.Debug(ctx, "AI control stream: %v", v)
 			}
 		}
 	}()
@@ -3309,7 +3317,7 @@ func (p *Player) executeAIControl(ctx context.Context, page *rod.Page, action mo
 
 		// 使用带超时的 context 调用 SendMessageInterface
 		// 这样可以确保即使工具调用卡住，也能在超时后返回
-		err := p.agentManager.SendMessageInterface(aiCtx, sessionID, prompt, streamChan)
+		err := p.agentManager.SendMessageInterface(aiCtx, sessionID, prompt, streamChan, llmConfigID)
 
 		if err != nil {
 			logger.Error(ctx, "AI control task execution error: %v", err)

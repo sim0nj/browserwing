@@ -66,8 +66,9 @@ type ScriptAction struct {
 	ScreenshotHeight int    `json:"screenshot_height,omitempty"` // 截图区域高度（region模式）
 
 	// AI控制相关字段（用于 ai_control 类型）
-	AIControlPrompt string `json:"ai_control_prompt,omitempty"` // AI控制的提示词
-	AIControlXPath  string `json:"ai_control_xpath,omitempty"`  // 可选的元素XPath（用于提示词上下文）
+	AIControlPrompt      string `json:"ai_control_prompt,omitempty"`       // AI控制的提示词
+	AIControlXPath       string `json:"ai_control_xpath,omitempty"`        // 可选的元素XPath（用于提示词上下文）
+	AIControlLLMConfigID string `json:"ai_control_llm_config_id,omitempty"` // AI控制使用的LLM配置ID（为空则使用默认）
 
 	Condition *ActionCondition `json:"condition,omitempty"`
 
@@ -119,12 +120,13 @@ func (a *ScriptAction) CopyWithoutSemanticInfo() *ScriptAction {
 		Method:           a.Method,
 		Status:           a.Status,
 		XHRID:            a.XHRID,
-		ScreenshotMode:   a.ScreenshotMode,
-		ScreenshotWidth:  a.ScreenshotWidth,
-		ScreenshotHeight: a.ScreenshotHeight,
-		AIControlPrompt:  a.AIControlPrompt,
-		AIControlXPath:   a.AIControlXPath,
-		Condition:        a.Condition,
+		ScreenshotMode:       a.ScreenshotMode,
+		ScreenshotWidth:      a.ScreenshotWidth,
+		ScreenshotHeight:     a.ScreenshotHeight,
+		AIControlPrompt:      a.AIControlPrompt,
+		AIControlXPath:       a.AIControlXPath,
+		AIControlLLMConfigID: a.AIControlLLMConfigID,
+		Condition:            a.Condition,
 	}
 }
 

@@ -103,7 +103,8 @@ type AgentManagerInterface interface {
 	// sessionID: 会话ID，如果不存在会自动创建
 	// userMessage: 用户输入的消息
 	// streamChan: 用于接收流式响应块的通道
-	SendMessageInterface(ctx context.Context, sessionID, userMessage string, streamChan chan<- any) error
+	// llmConfigID: LLM配置ID，为空则使用默认配置
+	SendMessageInterface(ctx context.Context, sessionID, userMessage string, streamChan chan<- any, llmConfigID string) error
 }
 
 // BrowserInstanceRuntime 浏览器实例运行时信息
@@ -157,6 +158,11 @@ func NewManager(cfg *config.Config, db *storage.BoltDB, llmManager *llm.Manager)
 	// 设置 LLM 管理器
 	if llmManager != nil {
 		recorder.SetLLMManager(llmManager)
+	}
+	
+	// 设置数据库接口
+	if db != nil {
+		recorder.SetDB(db)
 	}
 
 	return &Manager{

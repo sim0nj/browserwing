@@ -270,8 +270,9 @@ export interface ScriptAction {
   screenshot_height?: number
 
   // AI 控制相关字段（用于 ai_control 类型）
-  ai_control_prompt?: string   // AI 控制的提示词
-  ai_control_xpath?: string    // 可选的元素 XPath（用于提示词上下文）
+  ai_control_prompt?: string         // AI 控制的提示词
+  ai_control_xpath?: string          // 可选的元素 XPath（用于提示词上下文）
+  ai_control_llm_config_id?: string  // AI 控制使用的 LLM 配置 ID（为空则使用默认）
 
   // 语义信息字段（用于自愈）
   intent?: {

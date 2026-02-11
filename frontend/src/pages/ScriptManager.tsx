@@ -108,6 +108,9 @@ export default function ScriptManager() {
   const [jsonInput, setJsonInput] = useState('')
   const [jsonInputError, setJsonInputError] = useState('')
   const importMenuRef = useRef<HTMLDivElement>(null)
+
+  // LLM 配置相关
+  const [llmConfigs, setLlmConfigs] = useState<any[]>([])
   const importButtonRef = useRef<HTMLButtonElement>(null)
   
   // 导出方式相关
@@ -154,6 +157,7 @@ export default function ScriptManager() {
       loadScripts()
       loadRecordingConfig()
       loadBrowserInstances()
+      loadLLMConfigs()
     } else if (activeTab === 'executions') {
       loadExecutions()
     }
@@ -226,6 +230,15 @@ export default function ScriptManager() {
       setRecordingConfig(response.data)
     } catch (err) {
       console.error('加载录制配置失败:', err)
+    }
+  }
+
+  const loadLLMConfigs = async () => {
+    try {
+      const response = await api.listLLMConfigs()
+      setLlmConfigs(response.data.configs || [])
+    } catch (err) {
+      console.error('加载LLM配置失败:', err)
     }
   }
 
@@ -2289,7 +2302,7 @@ export default function ScriptManager() {
                                         className="input flex-1 text-sm"
                                         placeholder={t('script.editor.variables.namePlaceholder') || '变量名（如：username）'}
                                         onKeyPress={(e) => {
-                                          if (e.key === 'Enter') {
+                                          if (e.key === 'Enter' && newVariableName.trim()) {
                                             e.preventDefault()
                                             handleAddVariable()
                                           }
@@ -2302,7 +2315,7 @@ export default function ScriptManager() {
                                         className="input flex-1 text-sm"
                                         placeholder={t('script.editor.variables.valuePlaceholder') || '默认值'}
                                         onKeyPress={(e) => {
-                                          if (e.key === 'Enter') {
+                                          if (e.key === 'Enter' && newVariableName.trim()) {
                                             e.preventDefault()
                                             handleAddVariable()
                                           }
@@ -2310,7 +2323,8 @@ export default function ScriptManager() {
                                       />
                                       <button
                                         onClick={handleAddVariable}
-                                        className="btn-primary px-4 py-2 text-sm flex items-center gap-1"
+                                        disabled={!newVariableName.trim()}
+                                        className="btn-primary px-4 py-2 text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title={t('script.editor.variables.addVariable') || '添加变量'}
                                       >
                                         <Plus className="w-4 h-4" />
@@ -2614,6 +2628,7 @@ export default function ScriptManager() {
                                             hasCopiedAction={!!copiedAction}
                                             availableVariables={Array.from(availableVars)}
                                             isAnyDragging={isDraggingAction}
+                                            llmConfigs={llmConfigs}
                                           />
                                         )
                                       })}
@@ -2623,7 +2638,7 @@ export default function ScriptManager() {
                               ) : (
                                 <div className="space-y-2">
                                   {script.actions.map((action, index) => (
-                                    <ActionItemView key={index} action={action} index={index} />
+                                    <ActionItemView key={index} action={action} index={index} llmConfigs={llmConfigs} />
                                   ))}
                                 </div>
                               )}
@@ -3662,9 +3677,10 @@ interface SortableActionItemProps {
   hasCopiedAction: boolean
   availableVariables?: string[]  // 可用的变量列表
   isAnyDragging: boolean  // 是否有任何项正在拖动
+  llmConfigs?: any[]  // LLM 配置列表
 }
 
-function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate, onCopyToClipboard, onPaste, hasCopiedAction, availableVariables, isAnyDragging }: SortableActionItemProps) {
+function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate, onCopyToClipboard, onPaste, hasCopiedAction, availableVariables, isAnyDragging, llmConfigs }: SortableActionItemProps) {
   const { t } = useLanguage()
   const [isSemanticExpanded, setIsSemanticExpanded] = useState(false)
   const {
@@ -4070,17 +4086,35 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
               </div>
             )}
             {action.type === 'ai_control' && (
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{t('script.action.aiControlPrompt')}</label>
-                <textarea
-                  value={action.ai_control_prompt || ''}
-                  onChange={(e) => onUpdate(index, 'ai_control_prompt', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={6}
-                  placeholder={t('script.action.aiControlPromptPlaceholder')}
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('script.action.aiControlPromptHint')}</p>
-              </div>
+              <>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t('script.action.aiControlLLM')}</label>
+                  <select
+                    value={action.ai_control_llm_config_id || ''}
+                    onChange={(e) => onUpdate(index, 'ai_control_llm_config_id', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">{t('script.action.aiControlLLMDefault')}</option>
+                    {llmConfigs?.map(config => (
+                      <option key={config.id} value={config.id}>
+                        {config.name} ({config.model})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('script.action.aiControlLLMHint')}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">{t('script.action.aiControlPrompt')}</label>
+                  <textarea
+                    value={action.ai_control_prompt || ''}
+                    onChange={(e) => onUpdate(index, 'ai_control_prompt', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={6}
+                    placeholder={t('script.action.aiControlPromptPlaceholder')}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('script.action.aiControlPromptHint')}</p>
+                </div>
+              </>
             )}
             {action.type === 'screenshot' && (
               <>
@@ -4427,9 +4461,10 @@ function SortableActionItem({ id, action, index, onUpdate, onDelete, onDuplicate
 interface ActionItemViewProps {
   action: ScriptAction
   index: number
+  llmConfigs?: any[]
 }
 
-function ActionItemView({ action, index }: ActionItemViewProps) {
+function ActionItemView({ action, index, llmConfigs }: ActionItemViewProps) {
   const { t } = useLanguage()
   const [isSemanticExpanded, setIsSemanticExpanded] = useState(false)
 
@@ -4599,18 +4634,23 @@ function ActionItemView({ action, index }: ActionItemViewProps) {
         )}
         {action.type === 'ai_control' && (
           <>
+            {action.ai_control_llm_config_id && (
+              <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                <span className="font-medium">{t('script.action.aiControlLLM')}</span>{' '}
+                <code className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-sm">
+                  {(() => {
+                    const config = llmConfigs?.find(c => c.id === action.ai_control_llm_config_id)
+                    return config ? `${config.name} (${config.model})` : action.ai_control_llm_config_id
+                  })()}
+                </code>
+              </div>
+            )}
             <div className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">{t('script.action.aiControlPrompt')}</span>
               <div className="bg-gray-100 dark:bg-gray-900 px-3 py-2 rounded-lg mt-1 text-sm whitespace-pre-wrap text-gray-800 dark:text-gray-200">
                 {action.ai_control_prompt || '-'}
               </div>
             </div>
-            {action.ai_control_xpath && (
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                <span className="font-medium">{t('script.action.aiControlXPath')}</span>{' '}
-                <code className="bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-sm break-all">{action.ai_control_xpath}</code>
-              </div>
-            )}
           </>
         )}
         {action.type === 'screenshot' && (

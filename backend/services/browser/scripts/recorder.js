@@ -2414,6 +2414,36 @@ if (window.__browserwingRecorder__) {
 		description.style.cssText = 'font-size:14px;color:#64748b;line-height:1.6;margin-bottom:20px;';
 		description.textContent = '{{AI_CONTROL_DESCRIPTION}}';
 		
+		// LLM 选择区域
+		var llmLabel = document.createElement('div');
+		llmLabel.className = '__browserwing-protected__';
+		llmLabel.style.cssText = 'font-size:13px;font-weight:600;color:#334155;margin-bottom:8px;letter-spacing:-0.01em;';
+		llmLabel.textContent = '{{AI_CONTROL_LLM_LABEL}}';
+		
+		var llmSelect = document.createElement('select');
+		llmSelect.id = '__ai_control_llm_select__';
+		llmSelect.className = '__browserwing-protected__';
+		llmSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;color:#0f172a;background:#f8fafc;cursor:pointer;transition:all 0.2s;margin-bottom:16px;font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;';
+		llmSelect.onfocus = function() { this.style.borderColor = '#64748b'; this.style.boxShadow = '0 0 0 2px rgba(100, 116, 139, 0.1)'; };
+		llmSelect.onblur = function() { this.style.borderColor = '#e2e8f0'; this.style.boxShadow = 'none'; };
+		
+		// 添加默认选项
+		var defaultOption = document.createElement('option');
+		defaultOption.value = '';
+		defaultOption.textContent = '{{AI_CONTROL_LLM_DEFAULT}}';
+		llmSelect.appendChild(defaultOption);
+		
+		// 添加 LLM 配置选项
+		if (window.__llmConfigs__ && window.__llmConfigs__.length > 0) {
+			for (var i = 0; i < window.__llmConfigs__.length; i++) {
+				var config = window.__llmConfigs__[i];
+				var option = document.createElement('option');
+				option.value = config.id;
+				option.textContent = config.name + ' (' + config.model + ')';
+				llmSelect.appendChild(option);
+			}
+		}
+		
 		// 提示词输入区域
 		var promptLabel = document.createElement('div');
 		promptLabel.className = '__browserwing-protected__';
@@ -2487,6 +2517,8 @@ if (window.__browserwingRecorder__) {
 		footer.appendChild(confirmBtn);
 		
 		content.appendChild(description);
+		content.appendChild(llmLabel);
+		content.appendChild(llmSelect);
 		content.appendChild(promptLabel);
 		content.appendChild(selectElementBtn);
 		content.appendChild(promptInput);
@@ -2723,11 +2755,16 @@ if (window.__browserwingRecorder__) {
 		// 使用第一个XPath（如果有多个的话）
 		var elementXPath = xpathValues.length > 0 ? xpathValues[0] : '';
 		
+		// 获取选择的 LLM 配置 ID
+		var llmSelect = document.getElementById('__ai_control_llm_select__');
+		var llmConfigID = llmSelect ? llmSelect.value : '';
+		
 		var action = {
 			type: 'ai_control',
 			timestamp: Date.now(),
 			ai_control_prompt: userPrompt,
 			ai_control_xpath: elementXPath,
+			ai_control_llm_config_id: llmConfigID,
 			description: 'AI控制: ' + userPrompt.substring(0, 50) + (userPrompt.length > 50 ? '...' : '')
 		};
 		
